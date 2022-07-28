@@ -11,8 +11,8 @@ import datetime as dt
 topic = "aircon/#"
 client_id = f'python-mqtt-{random.randint(0, 1000)}'
 
-#ac = Aircon(0x42)
-ac = Aircon(0x40)
+ac = Aircon(0x42)
+#ac = Aircon(0x40)
 disp = Display()
 #db = DB('sqlite:///log.sqlite3')
 timestr = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -43,20 +43,6 @@ def connect_mqtt():
     client.on_connect = on_connect
     client.connect(broker, port)
     return client
-
-def publish(client):
-    msg_count = 0
-    while True:
-        time.sleep(1)
-        msg = f"messages: {msg_count}"
-        result = client.publish(topic, msg)
-        # result: [0, 1]
-        status = result[0]
-        if status == 0:
-            print(f"Send `{msg}` to topic `{topic}`")
-        else:
-            print(f"Failed to send message to topic {topic}")
-        msg_count += 1
 
 def subscribe(client: mqtt_client):
     def on_message(client, userdata, msg):
@@ -96,16 +82,18 @@ def subscribe(client: mqtt_client):
                 for c in ac.params:
                     line += f' {c:02X}'
             disp.add_stat(3, line)
-            line = 'pong:  '
-            if ac.pong:
-                for c in ac.pong:
+            line = 'sensors: '
+            if ac.sensor:
+                line += '{:s}'.format(str(ac.sensor))
+            disp.add_stat(4, f'{line:30s}')
+            line = 'power:  '
+            if 0x94 in ac.extra:
+                value = ac.extra[0x94]
+                #line += '{:s}'.format(str(ac.extra))
+                for c in value:
                     line += f' {c:02X}'
-            disp.add_stat(4, line)
-            line = 'rep_94:'
-            if ac.reply_94:
-                for c in ac.reply_94:
-                    line += f' {c:02X}'
-            disp.add_stat(5, line)
+            disp.add_stat(5, f'{line:30s}')
+
             disp.disp_stat()
         elif msg.topic == 'aircon/packet/error':
             status = msg.payload
@@ -117,53 +105,59 @@ def subscribe(client: mqtt_client):
 def run():
     client = connect_mqtt()
     subscribe(client)
+    def transmit(p):
+        result = client.publish('aircon/packet/tx', bytearray(p))
+        # result: [0, 1]
+        #status = result[0]
+        #if status == 0:
+        #    print(f"Send `{msg}` to topic `{topic}`")
+        #else:
+        #    print(f"Failed to send message to topic {topic}")
+        line = 'Sent: '
+        for a in p:
+            line += f'{a:02X} '
+        disp.add_stat(13, f'{line:44s}')
+        disp.disp_stat()
+
+    ac.transmit = transmit
     #client.loop_forever()
     while True:
         client.loop()
+        ac.loop()
+        line = 'State:   '
+        line += ac.state_text().capitalize()
+        disp.add_stat(14, f'{line:36s}')
         c = disp.getch()
-        line = 'Sent: '
-        p = None
         if c == ord('q'):
             break
         elif c == ord('z'):
-            p = ac.set_mode('A')
+            ac.set_mode('A')
         elif c == ord('x'):
-            p = ac.set_mode('H')
+            ac.set_mode('H')
         elif c == ord('c'):
-            p = ac.set_mode('D')
+            ac.set_mode('D')
         elif c == ord('v'):
-            p = ac.set_mode('C')
+            ac.set_mode('C')
         elif c == ord('b'):
-            p = ac.set_mode('F')
+            ac.set_mode('F')
         elif c == ord('a'):
-            p = ac.set_fan('L')
+            ac.set_fan('L')
         elif c == ord('s'):
-            p = ac.set_fan('M')
+            ac.set_fan('M')
         elif c == ord('d'):
-            p = ac.set_fan('H')
+            ac.set_fan('H')
         elif c == ord('f'):
-            p = ac.set_fan('A')
+            ac.set_fan('A')
         elif c == ord('e'):
             temp = ac.temp1
             if temp > ac.__class__.MIN_TMP:
                 temp -= 1
-            p = ac.set_temp(temp)
+            ac.set_temp(temp)
         elif c == ord('r'):
             temp = ac.temp1
             if temp < ac.__class__.MAX_TMP:
                 temp += 1
-            p = ac.set_temp(temp)
-        if p is not None:
-            for a in p:
-                line += f'{a:02X} '
-            result = client.publish('aircon/packet/tx', bytearray(p))
-            # result: [0, 1]
-            #status = result[0]
-            #if status == 0:
-            #    print(f"Send `{msg}` to topic `{topic}`")
-            #else:
-            #    print(f"Failed to send message to topic {topic}")
-            disp.add_stat(14, f'{line:36s}')
-            disp.disp_stat()
+            ac.set_temp(temp)
+        disp.disp_stat()
 
 run()

@@ -1,13 +1,17 @@
 from enum import IntEnum
+import time
 
 HEAD_TMP = 0b01
 HEAD_FAN = 0b10
+RETRY_WAIT = 2.0 # timeout in seconds for command or query reply
+QUERY_INTERVAL = 60.0
 
 class State(IntEnum):
     START = 0
     IDLE = 1
     CMD = 2
-    SENSOR = 3
+    QUERY1 = 3
+    QUERY2 = 4
 
 class Aircon():
     mode = [
@@ -26,10 +30,22 @@ class Aircon():
     ]
     MAX_TMP = 29
     MIN_TMP = 18
+    state_dict = {
+        State.START: 'starting up',
+        State.IDLE: 'idle',
+        State.CMD: 'command sent',
+        State.QUERY1: 'sensor query',
+        State.QUERY2: 'extra query',
+    }
 
     def __init__(self, addr):
-        self.state = State.IDLE
+        self.transmit = None
+        self.c_queue = [] # command packet queue
+        self.q1_queue = [] # sensor query packet queue
+        self.q2_queue = [] # extra query packet queue
+        self.state = State.START
         self.addr = addr
+
         self.state1 = None
         self.state2 = None
         self.params = None
@@ -42,13 +58,68 @@ class Aircon():
         self.temp1 = None
         self.temp2 = None
         self.save = None
+        self.sensor = {}
+        self.extra = {}
+        self.q_time = 0.0
 
-        self.query_e8 = None
-        self.reply_9e = None
-        self.reply_94 = None
-        self.reply = {}
+    def send_cmd(self, p):
+        self.c_queue.append(p)
+        if self.state == State.IDLE:
+            self.state = State.CMD
+            self.transmit(self.c_queue[0])
+            self.c_time = time.time()
 
-        self.state = State.START
+    def send_query1(self, p):
+        self.q1_queue.append(p)
+        if self.state == State.IDLE:
+            self.state = State.QUERY1
+            self.transmit(self.q1_queue[0])
+            self.q1_time = time.time()
+
+    def send_query2(self, p):
+        self.q2_queue.append(p)
+        if self.state == State.IDLE:
+            self.state = State.QUERY2
+            self.transmit(self.q2_queue[0])
+            self.q2_time = time.time()
+
+    def loop(self):
+        if self.state == State.IDLE:
+            if self.c_queue:
+                self.state = State.CMD
+                self.transmit(self.c_queue[0])
+                self.c_time = time.time()
+            elif self.q1_queue:
+                self.state = State.QUERY1
+                self.transmit(self.q1_queue[0])
+                self.q1_time = time.time()
+            elif self.q2_queue:
+                self.state = State.QUERY2
+                self.transmit(self.q2_queue[0])
+                self.q2_time = time.time()
+            elif time.time() - self.q_time > QUERY_INTERVAL:
+                #self.sensor_query(0x00)
+                #self.sensor_query(0x01)
+                self.sensor_query(0x02)
+                self.sensor_query(0x03)
+                self.sensor_query(0x04)
+                self.power_query()
+                self.q_time = time.time()
+        elif self.state == State.CMD:
+            if time.time() - self.c_time > RETRY_WAIT:
+                # no ack, retry
+                self.transmit(self.c_queue[0])
+                self.c_time = time.time()
+        elif self.state == State.QUERY1:
+            if time.time() - self.q1_time > RETRY_WAIT:
+                # no reply, retry
+                self.transmit(self.q1_queue[0])
+                self.q1_time = time.time()
+        elif self.state == State.QUERY2:
+            if time.time() - self.q2_time > RETRY_WAIT:
+                # no reply, retry
+                self.transmit(self.q2_queue[0])
+                self.q2_time = time.time()
 
     def parse(self, p):
         if p[0] == 0x00:
@@ -58,10 +129,7 @@ class Aircon():
                 self.parse_params(p)
             elif p[1] == self.addr:
                 self.parse_reply(p)
-        elif p[0] == self.addr:
-            if p[1] == 0x00:
-                self.parse_remote(p)
-    
+
     def parse_broadcast(self, p):
         if p[2] == 0x58:
             self.state1 = p[6:14]
@@ -87,26 +155,22 @@ class Aircon():
             self.params = p[6:8]
     
     def parse_reply(self, p):
-        if self.query_e8 is None:
-            return
-        if p[2] == 0x18 and p[5] == 0x0c:
-            self.pong = p[6:12]
-        if p[2] == 0x18 and p[5] == 0xe8:
-            self.e8 = p[6:11]
-            if self.query_e8[3] == 0x94:
-                self.reply_94 = self.e8
-            elif self.query_e8[3] == 0x9e:
-                self.reply_9e = self.e8
-            key = ''
-            for c in self.query_e8:
-                key += f'{c:02X}'
-            self.reply[key] = self.e8
-            self.query_e8 = None
+        if p[2] == 0x18 and p[4] == 0x80 and p[5] == 0xa1:
+            if self.state == State.CMD:
+                self.c_queue.pop(0)
+                self.state = State.IDLE
+        if p[2] == 0x1a and p[4] == 0x80 and p[5] == 0xef:
+            if self.state == State.QUERY1:
+                p0 = self.q1_queue.pop(0)
+                if p[8] == 0x2c:
+                    self.sensor[p0[11]] = p[10]
+                self.state = State.IDLE
+        if p[2] == 0x18 and p[4] == 0x80 and p[5] == 0xe8:
+            if self.state == State.QUERY2:
+                p0 = self.q2_queue.pop(0)
+                self.extra[p0[9]] = p[6:11]
+                self.state = State.IDLE
 
-    def parse_remote(self, p):
-        if p[2] == 0x15 and p[5] == 0xe8:
-            self.query_e8 = p[6:10]
-    
     def mode_text(self, val):
         text = f'{val:03b}'
         for d, cmd, label in self.__class__.mode:
@@ -122,6 +186,9 @@ class Aircon():
                 text = label.title()
                 break
         return '{:4s}'.format(text)
+    
+    def state_text(self):
+        return self.__class__.state_dict[self.state]
 
     def set_mode(self, mode):
         p = [self.addr, 0x00, 0x11]
@@ -139,13 +206,13 @@ class Aircon():
         for c in p:
             ck ^= c
         p.append(ck)
-        return p
+        self.send_cmd(p)
 
     def set_cmd(self, head, mode, fan_lv, temp):
         assert mode is not None
         assert fan_lv is not None
-        assert temp >= self.__class__.MIN_TMP#18
-        assert temp <= self.__class__.MAX_TMP#29
+        assert temp >= self.__class__.MIN_TMP
+        assert temp <= self.__class__.MAX_TMP
         p = [self.addr, 0x00, 0x11]
         payload = [0x08, 0x4c]
         mode = mode & 0b111
@@ -162,10 +229,10 @@ class Aircon():
         for c in p:
             ck ^= c
         p.append(ck)
-        return p
+        self.send_cmd(p)
 
     def set_temp(self, temp):
-        return self.set_cmd(HEAD_TMP, self.mode, self.fan_lv, temp)
+        self.set_cmd(HEAD_TMP, self.mode, self.fan_lv, temp)
     
     def set_fan(self, fan):
         fan_lv = None
@@ -174,9 +241,10 @@ class Aircon():
                 fan_lv = d
                 break
         assert fan_lv is not None
-        return self.set_cmd(HEAD_FAN, self.mode, fan_lv, self.temp1)
+        self.set_cmd(HEAD_FAN, self.mode, fan_lv, self.temp1)
 
     def sensor_query(self, id):
+        assert id < 0xff
         p = [self.addr, 0x00, 0x17]
         payload = [0x08, 0x80]
         payload += [0xef, 0x00, 0x2c, 0x08, 0x00]
@@ -187,5 +255,21 @@ class Aircon():
         for c in p:
             ck ^= c
         p.append(ck)
-        return p
-       
+        self.send_query1(p)
+
+    def extra_query(self, id):
+        assert id in [0x94, 0x9e]
+        p = [self.addr, 0x00, 0x15]
+        payload = [0x08, 0xe8]
+        payload += [0x00, 0x01, 0x00]
+        payload.append(id)
+        p.append(len(payload))
+        p += payload
+        ck = 0x0
+        for c in p:
+            ck ^= c
+        p.append(ck)
+        self.send_query2(p)
+
+    def power_query(self):
+        self.extra_query(0x94)

@@ -21,7 +21,7 @@ class Display():
         win_raw.refresh()
 
         begin_x = 71; begin_y = 1
-        height = 16; width = 40
+        height = 16; width = 50
         win_state = curses.newwin(height, width, begin_y, begin_x)
         win_state.refresh()
         win_state.border()
