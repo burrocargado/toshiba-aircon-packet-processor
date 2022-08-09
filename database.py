@@ -45,11 +45,11 @@ class DB():
         p.stat = stat
         p.time = dt.datetime.now()
         if packet is not None:
-            p.txaddr = bytes(packet[0:1]).hex()
-            p.rxaddr = bytes(packet[1:2]).hex()
-            p.opc1 = bytes(packet[2:3]).hex()
-            p.mode = bytes(packet[4:5]).hex()
-            p.opc2 = bytes(packet[5:6]).hex()
+            p.txaddr = bytes([packet[0]]).hex()
+            p.rxaddr = bytes([packet[1]]).hex()
+            p.opc1 = bytes([packet[2]]).hex()
+            p.mode = bytes([packet[4]]).hex()
+            p.opc2 = bytes([packet[5]]).hex()
             p.payload = bytes(packet[6:-1]).hex()
             p.rawdata = bytes(packet)
         self.session.add(p)
