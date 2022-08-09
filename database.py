@@ -34,6 +34,29 @@ class Packet(Base):
     payload = Column(Text)
     rawdata = Column(BLOB)
 
+class Status(Base):
+    __tablename__ = 'status'
+
+    id = Column('id', Integer, primary_key=True)
+    time = Column(DateTime)
+    power = Column(String(3))
+    mode = Column(String(9))
+    fan = Column(String(2))
+    fanlv = Column(String(4))
+    settmp = Column(Integer)
+    temp = Column(Integer)
+    pwrlv1 = Column(Integer)
+    pwrlv2 = Column(Integer)
+    sens_ta = Column(Integer)
+    sens_tcj = Column(Integer)
+    sens_tc = Column(Integer)
+    sens_te = Column(Integer)
+    sens_to = Column(Integer)
+    sens_td = Column(Integer)
+    sens_ts = Column(Integer)
+    sens_ths = Column(Integer)
+    sens_current = Column(Integer)
+
 class DB():
     
     def __init__(self, url='sqlite:///db.sqlite3'):
@@ -56,3 +79,9 @@ class DB():
         self.session.commit()
 
         return p.id
+
+    def write_status(self, status):
+        s = Status(**status)
+        s.time = dt.datetime.now()
+        self.session.add(s)
+        self.session.commit()
