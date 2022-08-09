@@ -58,43 +58,47 @@ def subscribe(client: mqtt_client):
             line += f'{c:02X}'
             disp.print_raw(line)
 
-            line = 'State1:'
             if ac.state1:
+                line = 'State1: '
                 for c in ac.state1:
                     line += f' {c:02X}'
-                disp.add_stat(6, 'Power:   {:1b}'.format(ac.power))
+                disp.add_stat(1, line)
+                y = 7
+                disp.add_stat(y, 'Power:   {:1b}'.format(ac.power)); y +=1
                 #disp.add_stat(7, 'Mode:  {:03b}'.format(ac.mode))
-                disp.add_stat(7, 'Mode:    {:s}'.format(ac.mode_text(ac.mode)))
-                disp.add_stat(8, 'Fan:     {:1b}'.format(ac.fan))
-                #disp.add_stat(9, 'FanLV: {:03b}'.format(ac.fan_lv))
-                disp.add_stat(9, 'FanLV:   {:s}'.format(ac.fan_text(ac.fan_lv)))
-                disp.add_stat(10,'SetTemp: {:2d}'.format(ac.temp1))
-                disp.add_stat(11,'Temp:    {:2d}'.format(ac.temp2))
-                disp.add_stat(12,'Save:    {:1b}'.format(ac.save))
-            disp.add_stat(1, line)
-            line = 'State2:'
-            if ac.state2:
-                for c in ac.state2:
-                    line += f' {c:02X}'
-            disp.add_stat(2, line)
-            line = 'params:'
+                disp.add_stat(y, 'Mode:    {:9s}'.format(ac.mode_text(ac.mode).title())); y +=1
+                disp.add_stat(y, 'Clean:   {:1b}'.format(ac.clean)); y +=1
+                #disp.add_stat(9, 'FanLv: {:03b}'.format(ac.fan_lv))
+                disp.add_stat(y, 'FanLv:   {:4s}'.format(ac.fan_text(ac.fan_lv).title())); y +=1
+                disp.add_stat(y,'SetTemp: {:2d}'.format(ac.temp1)); y +=1
+                disp.add_stat(y,'Temp:    {:2d}'.format(ac.temp2)); y +=1
+                disp.add_stat(y,'Save:    {:3s}'.format(ac.save_text(ac.save).title()))
+            #line = 'State2: '
+            #if ac.state2:
+            #    for c in ac.state2:
+            #        line += f' {c:02X}'
+            #disp.add_stat(2, line)
+            
             if ac.params:
+                line = 'params: '
                 for c in ac.params:
                     line += f' {c:02X}'
-            disp.add_stat(3, line)
-            line = 'sensors: '
-            if ac.sensor:
-                line += '{:s}'.format(str(ac.sensor))
-            disp.add_stat(4, f'{line:30s}')
-            line = 'power:  '
-            if 0x94 in ac.extra:
-                value = ac.extra[0x94]
-                #line += '{:s}'.format(str(ac.extra))
-                for c in value:
-                    line += f' {c:02X}'
-            disp.add_stat(5, f'{line:30s}')
+                disp.add_stat(2, line)
+            #line = 'sensors: '
+            #if ac.sensor:
+            #    line += '{:s}'.format(str(ac.sensor))
+            #disp.add_stat(4, f'{line:30s}')
+            
+            #if 0x94 in ac.extra:
+            #    line = 'PwrLV:  '
+            #    value = ac.extra[0x94]
+            #    #line += '{:s}'.format(str(ac.extra))
+            #    for c in value:
+            #        line += f' {c:02X}'
+            #    disp.add_stat(5, f'{line:30s}')
 
-            disp.disp_stat()
+            #disp.disp_stat()
+        
         elif msg.topic == 'aircon/packet/error':
             status = msg.payload
             db.write_packet(status)
@@ -113,22 +117,41 @@ def run():
         #    print(f"Send `{msg}` to topic `{topic}`")
         #else:
         #    print(f"Failed to send message to topic {topic}")
-        line = 'Sent: '
+        line = 'Sent:    '
         for a in p:
             line += f'{a:02X} '
-        disp.add_stat(13, f'{line:44s}')
-        disp.disp_stat()
+        disp.add_stat(14, f'{line:55s}')
+        #disp.disp_stat()
+
+    def update_sensors():
+        y = 3
+        line = 'Sensors: '
+        line += '{:s}'.format(str({k: ac.sensor[k] for k in [0x02, 0x03, 0x04, 0x65, 0x6a]}))
+        disp.add_stat(y, f'{line:55s}'); y +=1
+        line = 'Sensors: '
+        line += '{:s}'.format(str({k: ac.sensor[k] for k in [0x60, 0x61, 0x62, 0x63]}))
+        disp.add_stat(y, f'{line:55s}'); y +=1
+        line = 'PwrLv:   '
+        line += '{:02d}, {:03d}'.format(ac.pwr_lv1, ac.pwr_lv2)
+        disp.add_stat(y, f'{line:30s}'); y +=1
+        line = 'Filter:  '
+        line += '{:04d} H'.format(ac.filter_time)
+        disp.add_stat(y, f'{line:30s}')
+        
 
     ac.transmit = transmit
+    ac.update_cb = update_sensors
     #client.loop_forever()
     while True:
         client.loop()
         ac.loop()
         line = 'State:   '
         line += ac.state_text().capitalize()
-        disp.add_stat(14, f'{line:36s}')
+        disp.add_stat(15, f'{line:36s}')
+        disp.loop()
         c = disp.getch()
         if c == ord('q'):
+            disp.quit()
             break
         elif c == ord('z'):
             ac.set_mode('A')
@@ -156,12 +179,13 @@ def run():
             temp = ac.temp1
             if temp > ac.__class__.MIN_TMP:
                 temp -= 1
-            ac.set_temp(temp)
+                ac.set_temp(temp)
         elif c == ord('r'):
             temp = ac.temp1
             if temp < ac.__class__.MAX_TMP:
                 temp += 1
-            ac.set_temp(temp)
-        disp.disp_stat()
+                ac.set_temp(temp)
+        #disp.disp_stat()
+        #disp.loop()
 
 run()
