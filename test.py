@@ -50,7 +50,7 @@ def subscribe(client: mqtt_client):
         if msg.topic == 'aircon/packet/rx':
             packet = msg.payload
             ac.parse(packet)
-            db.write_packet('OK', packet)
+            db.write_packet('RX', packet)
             line = ''
             for c in packet[:-1]:
                 line += f'{c:02X} '
@@ -99,6 +99,9 @@ def subscribe(client: mqtt_client):
 
             #disp.disp_stat()
         
+        elif msg.topic == 'aircon/packet/tx':
+            packet = msg.payload
+            db.write_packet('TX', packet)
         elif msg.topic == 'aircon/packet/error':
             status = msg.payload
             db.write_packet(status)
