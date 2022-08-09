@@ -68,6 +68,7 @@ class Aircon():
         self.save = None
         self.pwr_lv1 = None
         self.pwr_lv2 = None
+        self.filter_time = None
         self.sensor = {}
         self.extra = {}
         self.q_time = 0.0
@@ -125,6 +126,7 @@ class Aircon():
                 self.sensor_query(0x03)
                 self.sensor_query(0x04)
                 self.power_query()
+                self.filter_query()
                 self.q_time = time.time()
         elif self.state == State.CMD:
             if time.time() - self.c_time > RETRY_WAIT:
@@ -203,6 +205,8 @@ class Aircon():
                 if p0[9] == 0x94:
                     self.pwr_lv1 = p[9]
                     self.pwr_lv2 = p[10]
+                elif p0[9] == 0x9e:
+                    self.filter_time = (p[9] << 8) + p[10]
                 self.state = State.IDLE
 
     def mode_text(self, val):
@@ -316,6 +320,8 @@ class Aircon():
     def power_query(self):
         self.extra_query(0x94)
 
+    def filter_query(self):
+        self.extra_query(0x9e)
 
     def set_save(self, save):
         value = None
