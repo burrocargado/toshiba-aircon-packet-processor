@@ -148,6 +148,10 @@ def run():
             ac.set_fan('H')
         elif c == ord('f'):
             ac.set_fan('A')
+        elif c == ord('1'):
+            ac.set_save('S')
+        elif c == ord('2'):
+            ac.set_save('R')
         elif c == ord('e'):
             temp = ac.temp1
             if temp > ac.__class__.MIN_TMP:

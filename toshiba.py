@@ -12,6 +12,7 @@ class State(IntEnum):
     CMD = 2
     QUERY1 = 3
     QUERY2 = 4
+    SSAVE = 5
 
 class Aircon():
     mode = [
@@ -21,6 +22,10 @@ class Aircon():
         (0x04, 'D', 'dry'),
         (0x05, 'A', 'auto heat'),
         (0x06, '', 'auto cool')
+    ]
+    save = [
+        (0b11, 'R', 'off'),
+        (0b00, 'S', 'on')
     ]
     fan = [
         (0b101, 'L', 'low'),
@@ -36,6 +41,7 @@ class Aircon():
         State.CMD: 'command sent',
         State.QUERY1: 'sensor query',
         State.QUERY2: 'extra query',
+        State.SSAVE: 'setting save mode',
     }
 
     def __init__(self, addr):
@@ -43,6 +49,7 @@ class Aircon():
         self.c_queue = [] # command packet queue
         self.q1_queue = [] # sensor query packet queue
         self.q2_queue = [] # extra query packet queue
+        self.sv_queue = [] # seve mode setting packet queue
         self.state = State.START
         self.addr = addr
 
@@ -53,6 +60,7 @@ class Aircon():
         self.e8 = None
         self.power = None
         self.mode = None
+        self.save1 = None
         self.fan = None
         self.fan_lv = None
         self.temp1 = None
@@ -83,12 +91,23 @@ class Aircon():
             self.transmit(self.q2_queue[0])
             self.q2_time = time.time()
 
+    def send_sv(self, p):
+        self.sv_queue.append(p)
+        if self.state == State.IDLE:
+            self.state = State.SSAVE
+            self.transmit(self.sv_queue[0])
+            self.sv_time = time.time()
+
     def loop(self):
         if self.state == State.IDLE:
             if self.c_queue:
                 self.state = State.CMD
                 self.transmit(self.c_queue[0])
                 self.c_time = time.time()
+            elif self.sv_queue:
+                self.state = State.SSAVE
+                self.transmit(self.sv_queue[0])
+                self.sv_time = time.time()
             elif self.q1_queue:
                 self.state = State.QUERY1
                 self.transmit(self.q1_queue[0])
@@ -110,6 +129,14 @@ class Aircon():
                 # no ack, retry
                 self.transmit(self.c_queue[0])
                 self.c_time = time.time()
+        elif self.state == State.SSAVE:
+            if (self.sv_queue[0][7] >> 4) & 0b11 == self.save:
+                self.sv_queue.pop(0)
+                self.state = State.IDLE
+            elif time.time() - self.sv_time > RETRY_WAIT:
+                # save mode not set, retry
+                self.transmit(self.sv_queue[0])
+                self.sv_time = time.time()
         elif self.state == State.QUERY1:
             if time.time() - self.q1_time > RETRY_WAIT:
                 # no reply, retry
@@ -135,17 +162,19 @@ class Aircon():
             self.state1 = p[6:14]
             self.power = self.state1[0] & 0b1
             self.mode = (self.state1[0] >> 5) & 0b111
+            self.save = (self.state1[0] >> 3) & 0b11
             self.fan = (self.state1[1] >> 2) & 0b1
             self.fan_lv = (self.state1[1] >> 5) & 0b111
             self.temp1 = (self.state1[4] >> 1) - 35
             self.temp2 = (self.state1[5] >> 1) - 35
-            self.save = self.state1[7] & 0b1
+            self.save1 = self.state1[7] & 0b1
             if self.state == State.START:
                 self.state = State.IDLE
         if p[2] == 0x1c:
             self.state2 = p[6:12]
             self.power = self.state2[0] & 0b1
             self.mode = (self.state2[0] >> 5) & 0b111
+            self.save = (self.state2[0] >> 3) & 0b11
             self.fan = (self.state2[1] >> 2) & 0b1
             self.fan_lv = (self.state2[1] >> 5) & 0b111
             self.temp1 = (self.state2[4] >> 1) - 35
@@ -179,13 +208,21 @@ class Aircon():
                 break
         return '{:9s}'.format(text)
 
+    def save_text(self, val):
+        text = f'{val:02b}'
+        for d, cmd, label in self.__class__.save:
+            if d == val:
+                text = label
+                break
+        return text
+
     def fan_text(self, val):
         text = f'{val:03b}'
         for d, cmd, label in self.__class__.fan:
             if d == val:
                 text = label.title()
                 break
-        return '{:4s}'.format(text)
+        return text
     
     def state_text(self):
         return self.__class__.state_dict[self.state]
@@ -273,3 +310,27 @@ class Aircon():
 
     def power_query(self):
         self.extra_query(0x94)
+
+
+    def set_save(self, save):
+        value = None
+        for d, cmd, label in self.__class__.save:
+            if cmd == save:
+                value = d
+                break
+        assert value is not None
+        p = [self.addr, 0xfe, 0x10]
+        payload = [0x00, 0x4c]
+        a = 0b100000 | self.mode
+        payload.append(a)
+        a = value << 4 | 0b1000 | self.fan_lv
+        payload.append(a)
+        a = (self.temp1 + 35) << 1
+        payload.append(a)
+        p.append(len(payload))
+        p += payload
+        ck = 0x0
+        for c in p:
+            ck ^= c
+        p.append(ck)
+        self.send_sv(p)
