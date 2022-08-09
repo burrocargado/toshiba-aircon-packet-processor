@@ -46,6 +46,8 @@ class Aircon():
 
     def __init__(self, addr):
         self.transmit = None
+        self.update_cb = None
+        self.update = False
         self.c_queue = [] # command packet queue
         self.q1_queue = [] # sensor query packet queue
         self.q2_queue = [] # extra query packet queue
@@ -119,6 +121,9 @@ class Aircon():
                 self.state = State.QUERY2
                 self.transmit(self.q2_queue[0])
                 self.q2_time = time.time()
+            elif self.update_cb is not None and self.update:
+                self.update_cb()
+                self.update = False
             elif time.time() - self.q_time > QUERY_INTERVAL:
                 #self.sensor_query(0x00)
                 #self.sensor_query(0x01)
@@ -134,6 +139,7 @@ class Aircon():
                 self.power_query()
                 self.filter_query()
                 self.q_time = time.time()
+                self.update = True
         elif self.state == State.CMD:
             if time.time() - self.c_time > RETRY_WAIT:
                 # no ack, retry
