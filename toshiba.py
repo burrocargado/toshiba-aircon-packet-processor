@@ -66,6 +66,8 @@ class Aircon():
         self.temp1 = None
         self.temp2 = None
         self.save = None
+        self.pwr_lv1 = None
+        self.pwr_lv2 = None
         self.sensor = {}
         self.extra = {}
         self.q_time = 0.0
@@ -198,6 +200,9 @@ class Aircon():
             if self.state == State.QUERY2:
                 p0 = self.q2_queue.pop(0)
                 self.extra[p0[9]] = p[6:11]
+                if p0[9] == 0x94:
+                    self.pwr_lv1 = p[9]
+                    self.pwr_lv2 = p[10]
                 self.state = State.IDLE
 
     def mode_text(self, val):
