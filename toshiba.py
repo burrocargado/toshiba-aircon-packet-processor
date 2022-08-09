@@ -227,9 +227,9 @@ class Aircon():
         text = f'{val:03b}'
         for d, cmd, label in self.__class__.mode:
             if d == val:
-                text = label.title()
+                text = label
                 break
-        return '{:9s}'.format(text)
+        return text
 
     def save_text(self, val):
         text = f'{val:02b}'
@@ -243,7 +243,7 @@ class Aircon():
         text = f'{val:03b}'
         for d, cmd, label in self.__class__.fan:
             if d == val:
-                text = label.title()
+                text = label
                 break
         return text
     
