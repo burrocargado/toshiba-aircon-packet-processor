@@ -63,7 +63,7 @@ class Aircon():
         self.power = None
         self.mode = None
         self.save1 = None
-        self.fan = None
+        self.clean = None
         self.fan_lv = None
         self.temp1 = None
         self.temp2 = None
@@ -179,7 +179,7 @@ class Aircon():
             self.power = self.state1[0] & 0b1
             self.mode = (self.state1[0] >> 5) & 0b111
             self.save = (self.state1[0] >> 3) & 0b11
-            self.fan = (self.state1[1] >> 2) & 0b1
+            self.clean = (self.state1[1] >> 2) & 0b1
             self.fan_lv = (self.state1[1] >> 5) & 0b111
             self.temp1 = (self.state1[4] >> 1) - 35
             self.temp2 = (self.state1[5] >> 1) - 35
@@ -191,7 +191,7 @@ class Aircon():
             self.power = self.state2[0] & 0b1
             self.mode = (self.state2[0] >> 5) & 0b111
             self.save = (self.state2[0] >> 3) & 0b11
-            self.fan = (self.state2[1] >> 2) & 0b1
+            self.clean = (self.state2[1] >> 2) & 0b1
             self.fan_lv = (self.state2[1] >> 5) & 0b111
             self.temp1 = (self.state2[4] >> 1) - 35
 
