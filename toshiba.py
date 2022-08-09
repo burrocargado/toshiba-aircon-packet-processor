@@ -3,7 +3,7 @@ import time
 
 HEAD_TMP = 0b01
 HEAD_FAN = 0b10
-RETRY_WAIT = 2.0 # timeout in seconds for command or query reply
+RETRY_WAIT = 0.5 # timeout in seconds for command or query reply
 QUERY_INTERVAL = 60.0
 
 class State(IntEnum):
