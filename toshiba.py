@@ -203,6 +203,8 @@ class Aircon():
                 p0 = self.q1_queue.pop(0)
                 if p[8] == 0x2c:
                     self.sensor[p0[11]] = p[10]
+                else:
+                    self.sensor[p0[11]] = None
                 self.state = State.IDLE
         if p[2] == 0x18 and p[4] == 0x80 and p[5] == 0xe8:
             if self.state == State.QUERY2:
