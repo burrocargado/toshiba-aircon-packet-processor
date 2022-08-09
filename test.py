@@ -138,6 +138,26 @@ def run():
         line += '{:04d} H'.format(ac.filter_time)
         disp.add_stat(y, f'{line:30s}')
         
+        update = {
+            'power': 'ON' if ac.power == 1 else 'OFF',
+            'mode': ac.mode_text(ac.mode),
+            'fan': 'ON' if ac.clean == 1 else 'OFF',
+            'fanlv': ac.fan_text(ac.fan_lv),
+            'settmp': ac.temp1,
+            'temp': ac.temp2,
+            'pwrlv1': ac.pwr_lv1,
+            'pwrlv2': ac.pwr_lv2,
+            'sens_ta': ac.sensor[0x02],
+            'sens_tcj': ac.sensor[0x03],
+            'sens_tc': ac.sensor[0x04],
+            'sens_te': ac.sensor[0x60],
+            'sens_to': ac.sensor[0x61],
+            'sens_td': ac.sensor[0x62],
+            'sens_ts': ac.sensor[0x63],
+            'sens_ths': ac.sensor[0x65],
+            'sens_current': ac.sensor[0x6a],
+        }
+        db.write_status(update)
 
     ac.transmit = transmit
     ac.update_cb = update_sensors
