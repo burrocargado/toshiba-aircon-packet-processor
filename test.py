@@ -6,7 +6,7 @@ from display import Display
 import ssl
 from credentials import *
 from database import DB
-import datetime as dt
+#import datetime as dt
 
 topic = "aircon/#"
 client_id = f'python-mqtt-{random.randint(0, 1000)}'
@@ -14,9 +14,9 @@ client_id = f'python-mqtt-{random.randint(0, 1000)}'
 ac = Aircon(0x42)
 #ac = Aircon(0x40)
 disp = Display()
-#db = DB('sqlite:///log.sqlite3')
-timestr = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
-db = DB(f"sqlite:///packetlog/log-{timestr}.sqlite3")
+db = DB('sqlite:///packetlog/log.sqlite3')
+#timestr = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+#db = DB(f"sqlite:///packetlog/log-{timestr}.sqlite3")
 
 def connect_mqtt():
     def on_connect(client, userdata, flags, rc):
