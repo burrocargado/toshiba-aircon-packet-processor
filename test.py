@@ -96,14 +96,13 @@ def run():
     client = connect_mqtt()
     subscribe(client)
     def transmit(p):
-        _result = client.publish('aircon/packet/tx', bytearray(p))
+        result = client.publish('aircon/packet/tx', bytearray(p))
         # result: [0, 1]
-        #status = result[0]
-        #if status == 0:
-        #    print(f"Send `{msg}` to topic `{topic}`")
-        #else:
-        #    print(f"Failed to send message to topic {topic}")
-        line = 'Sent:    '
+        status = result[0]
+        if status == 0:
+            line = 'Sent:    '
+        else:
+            line = 'Failed:  '
         for a in p:
             line += f'{a:02X} '
         disp.add_stat(14, f'{line:55s}')
