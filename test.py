@@ -1,25 +1,27 @@
-from paho.mqtt import client as mqtt_client
+"""
+This is a test program using toshiba-aircon-mqtt-bridge.
+Tested with NTS-F1403Y1 released 2004.
+"""
 import random
-import time
+import ssl
+#import time
+
+from paho.mqtt import client as mqtt_client
+
 from toshiba import Aircon
 from display import Display
-import ssl
 from credentials import *
 from database import DB
-#import datetime as dt
 
-topic = "aircon/#"
+TOPIC = "aircon/#"
 client_id = f'python-mqtt-{random.randint(0, 1000)}'
 
 ac = Aircon(0x42)
-#ac = Aircon(0x40)
 disp = Display()
 db = DB('sqlite:///packetlog/log.sqlite3')
-#timestr = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
-#db = DB(f"sqlite:///packetlog/log-{timestr}.sqlite3")
 
 def connect_mqtt():
-    def on_connect(client, userdata, flags, rc):
+    def on_connect(_client, _userdata, _flags, rc):
         if rc == 0:
             print("Connected to MQTT Broker!")
         else:
@@ -35,18 +37,14 @@ def connect_mqtt():
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.load_verify_locations(ca_certs)
     context.load_cert_chain(certfile, keyfile)
-    
-    #client.tls_set(ca_certs, certfile, keyfile, cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLSv1, ciphers=None)
-    #client.tls_set(ca_certs, certfile, keyfile, cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLSv1_2)
-    #client.tls_set(ca_certs, certfile, keyfile, cert_reqs=ssl.CERT_REQUIRED, ciphers=None)
+
     client.tls_set_context(context)
     client.on_connect = on_connect
     client.connect(broker, port)
     return client
 
 def subscribe(client: mqtt_client):
-    def on_message(client, userdata, msg):
-        #print(f"Received `{msg.payload}` from `{msg.topic}` topic")
+    def on_message(_client, _userdata, msg):
         if msg.topic == 'aircon/packet/rx':
             packet = msg.payload
             ac.parse(packet)
@@ -64,41 +62,26 @@ def subscribe(client: mqtt_client):
                     line += f' {c:02X}'
                 disp.add_stat(1, line)
                 y = 7
-                disp.add_stat(y, 'Power:   {:1b}'.format(ac.power)); y +=1
-                #disp.add_stat(7, 'Mode:  {:03b}'.format(ac.mode))
-                disp.add_stat(y, 'Mode:    {:9s}'.format(ac.mode_text(ac.mode).title())); y +=1
-                disp.add_stat(y, 'Clean:   {:1b}'.format(ac.clean)); y +=1
-                #disp.add_stat(9, 'FanLv: {:03b}'.format(ac.fan_lv))
-                disp.add_stat(y, 'FanLv:   {:4s}'.format(ac.fan_text(ac.fan_lv).title())); y +=1
-                disp.add_stat(y,'SetTemp: {:2d}'.format(ac.temp1)); y +=1
-                disp.add_stat(y,'Temp:    {:2d}'.format(ac.temp2)); y +=1
-                disp.add_stat(y,'Save:    {:3s}'.format(ac.save_text(ac.save).title()))
-            #line = 'State2: '
-            #if ac.state2:
-            #    for c in ac.state2:
-            #        line += f' {c:02X}'
-            #disp.add_stat(2, line)
-            
+                disp.add_stat(y, f'Power:   {ac.power:1b}')
+                y +=1
+                disp.add_stat(y, f'Mode:    {ac.mode_text(ac.mode).title():9s}')
+                y +=1
+                disp.add_stat(y, f'Clean:   {ac.clean:1b}')
+                y +=1
+                disp.add_stat(y, f'FanLv:   {ac.fan_text(ac.fan_lv).title():4s}')
+                y +=1
+                disp.add_stat(y, f'SetTemp: {ac.temp1:2d}')
+                y +=1
+                disp.add_stat(y, f'Temp:    {ac.temp2:2d}')
+                y +=1
+                disp.add_stat(y, f'Save:    {ac.save_text(ac.save).title():3s}')
+
             if ac.params:
                 line = 'params: '
                 for c in ac.params:
                     line += f' {c:02X}'
                 disp.add_stat(2, line)
-            #line = 'sensors: '
-            #if ac.sensor:
-            #    line += '{:s}'.format(str(ac.sensor))
-            #disp.add_stat(4, f'{line:30s}')
-            
-            #if 0x94 in ac.extra:
-            #    line = 'PwrLV:  '
-            #    value = ac.extra[0x94]
-            #    #line += '{:s}'.format(str(ac.extra))
-            #    for c in value:
-            #        line += f' {c:02X}'
-            #    disp.add_stat(5, f'{line:30s}')
 
-            #disp.disp_stat()
-        
         elif msg.topic == 'aircon/packet/tx':
             packet = msg.payload
             db.write_packet('TX', packet)
@@ -106,14 +89,14 @@ def subscribe(client: mqtt_client):
             status = msg.payload
             db.write_packet(status)
 
-    client.subscribe(topic)
+    client.subscribe(TOPIC)
     client.on_message = on_message
 
 def run():
     client = connect_mqtt()
     subscribe(client)
     def transmit(p):
-        result = client.publish('aircon/packet/tx', bytearray(p))
+        _result = client.publish('aircon/packet/tx', bytearray(p))
         # result: [0, 1]
         #status = result[0]
         #if status == 0:
@@ -124,23 +107,25 @@ def run():
         for a in p:
             line += f'{a:02X} '
         disp.add_stat(14, f'{line:55s}')
-        #disp.disp_stat()
 
     def update_sensors():
         y = 3
         line = 'Sensors: '
-        line += '{:s}'.format(str({k: ac.sensor[k] for k in [0x02, 0x03, 0x04, 0x65, 0x6a]}))
-        disp.add_stat(y, f'{line:55s}'); y +=1
+        line += str({k: ac.sensor[k] for k in [0x02, 0x03, 0x04, 0x65, 0x6a]})
+        disp.add_stat(y, f'{line:55s}')
+        y +=1
         line = 'Sensors: '
-        line += '{:s}'.format(str({k: ac.sensor[k] for k in [0x60, 0x61, 0x62, 0x63]}))
-        disp.add_stat(y, f'{line:55s}'); y +=1
+        line += str({k: ac.sensor[k] for k in [0x60, 0x61, 0x62, 0x63]})
+        disp.add_stat(y, f'{line:55s}')
+        y +=1
         line = 'PwrLv:   '
-        line += '{:02d}, {:03d}'.format(ac.pwr_lv1, ac.pwr_lv2)
-        disp.add_stat(y, f'{line:30s}'); y +=1
+        line += f'{ac.pwr_lv1:02d}, {ac.pwr_lv2:03d}'
+        disp.add_stat(y, f'{line:30s}')
+        y +=1
         line = 'Filter:  '
         line += '{:04d} H'.format(ac.filter_time)
         disp.add_stat(y, f'{line:30s}')
-        
+
         update = {
             'power': 'ON' if ac.power == 1 else 'OFF',
             'mode': ac.mode_text(ac.mode),
@@ -164,7 +149,6 @@ def run():
 
     ac.transmit = transmit
     ac.update_cb = update_sensors
-    #client.loop_forever()
     while True:
         client.loop()
         ac.loop()
@@ -208,7 +192,5 @@ def run():
             if temp < ac.__class__.MAX_TMP:
                 temp += 1
                 ac.set_temp(temp)
-        #disp.disp_stat()
-        #disp.loop()
 
 run()

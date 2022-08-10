@@ -1,0 +1,4 @@
+[TYPECHECK]
+ignored-classes=curses
+disable=wildcard-import
+disable=not-callable

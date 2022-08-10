@@ -75,6 +75,11 @@ class Aircon():
         self.extra = {}
         self.q_time = 0.0
 
+        self.c_time = None
+        self.q1_time = None
+        self.q2_time = None
+        self.sv_time = None
+
     def send_cmd(self, p):
         self.c_queue.append(p)
         if self.state == State.IDLE:
@@ -246,7 +251,7 @@ class Aircon():
                 text = label
                 break
         return text
-    
+
     def state_text(self):
         return self.__class__.state_dict[self.state]
 
@@ -293,7 +298,7 @@ class Aircon():
 
     def set_temp(self, temp):
         self.set_cmd(HEAD_TMP, self.mode, self.fan_lv, temp)
-    
+
     def set_fan(self, fan):
         fan_lv = None
         for d, cmd, label in self.__class__.fan:

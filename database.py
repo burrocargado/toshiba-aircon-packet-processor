@@ -1,16 +1,14 @@
+import datetime as dt
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import (Column, Integer, String, Float, 
-    DateTime, Date, Text, ForeignKey, BLOB)
-from sqlalchemy import func
-from sqlalchemy.orm import relationship, backref
-
-import datetime as dt
+from sqlalchemy import (Column, Integer, String,
+    DateTime, Text, BLOB)
 
 class BaseEngine(object):
     def __init__(self, url):
-        self.engine = create_engine(url, encoding="utf-8")#, echo=True)
+        self.engine = create_engine(url, encoding="utf-8")
 
 class BaseSession(BaseEngine):
     def __init__(self, url):
@@ -22,7 +20,7 @@ Base = declarative_base()
 
 class Packet(Base):
     __tablename__ = 'packet'
-    
+
     id = Column('id', Integer, primary_key=True)
     time = Column(DateTime)
     stat = Column(String(2))
@@ -58,7 +56,7 @@ class Status(Base):
     sens_current = Column(Integer)
 
 class DB():
-    
+
     def __init__(self, url='sqlite:///db.sqlite3'):
         Base.metadata.create_all(bind=BaseEngine(url).engine)
         self.session = BaseSession(url).session
