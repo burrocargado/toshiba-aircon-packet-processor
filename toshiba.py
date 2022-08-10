@@ -58,8 +58,6 @@ class Aircon():
         self.state1 = None
         self.state2 = None
         self.params = None
-        self.pong = None
-        self.e8 = None
         self.power = None
         self.mode = None
         self.save1 = None
@@ -130,8 +128,6 @@ class Aircon():
                 self.update_cb()
                 self.update = False
             elif time.time() - self.q_time > QUERY_INTERVAL:
-                #self.sensor_query(0x00)
-                #self.sensor_query(0x01)
                 self.sensor_query(0x02)
                 self.sensor_query(0x03)
                 self.sensor_query(0x04)
