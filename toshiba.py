@@ -66,9 +66,9 @@ class Aircon():
         self.temp1 = None
         self.temp2 = None
         self.save = None
-        self.pwr_lv1 = None
-        self.pwr_lv2 = None
-        self.filter_time = None
+        self.pwr_lv1 = 0
+        self.pwr_lv2 = 0
+        self.filter_time = 0
         self.sensor = {}
         self.extra = {}
         self.q_time = 0.0
@@ -79,6 +79,8 @@ class Aircon():
         self.sv_time = None
 
     def send_cmd(self, p):
+        if self.transmit is None:
+            return
         self.c_queue.append(p)
         if self.state == State.IDLE:
             self.state = State.CMD
@@ -86,6 +88,9 @@ class Aircon():
             self.c_time = time.time()
 
     def send_query1(self, p):
+        if self.transmit is None:
+            self.sensor[p[11]] = 0
+            return
         self.q1_queue.append(p)
         if self.state == State.IDLE:
             self.state = State.QUERY1
@@ -93,6 +98,8 @@ class Aircon():
             self.q1_time = time.time()
 
     def send_query2(self, p):
+        if self.transmit is None:
+            return
         self.q2_queue.append(p)
         if self.state == State.IDLE:
             self.state = State.QUERY2
@@ -100,6 +107,8 @@ class Aircon():
             self.q2_time = time.time()
 
     def send_sv(self, p):
+        if self.transmit is None:
+            return
         self.sv_queue.append(p)
         if self.state == State.IDLE:
             self.state = State.SSAVE
