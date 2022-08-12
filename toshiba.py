@@ -286,6 +286,22 @@ class Aircon():
     def state_text(self):
         return self.__class__.state_dict[self.state]
 
+    def set_power(self, value):
+        """
+        value: True: ON, False: OFF
+        """
+        p = [self.addr, 0x00, 0x11]
+        payload = [0x08, 0x41]
+        byte = 0x03 if value else 0x02
+        payload.append(byte)
+        p.append(len(payload))
+        p += payload
+        ck = 0x0
+        for c in p:
+            ck ^= c
+        p.append(ck)
+        self.send_cmd(p)
+
     def set_mode(self, mode):
         p = [self.addr, 0x00, 0x11]
         payload = [0x08, 0x42]
