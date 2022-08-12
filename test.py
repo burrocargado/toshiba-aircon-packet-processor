@@ -152,6 +152,9 @@ def run():
             'sens_ts': ac.sensor[0x63],
             'sens_ths': ac.sensor[0x65],
             'sens_current': ac.sensor[0x6a],
+            'filter_time': ac.filter_time,
+            'filter': 'ON' if ac.filter == 1 else 'OFF',
+            'vent': 'ON' if ac.vent == 1 else 'OFF',
         }
         db.write_status(update)
 
