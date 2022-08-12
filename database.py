@@ -57,7 +57,8 @@ class Status(Base):
 
 class DB():
 
-    def __init__(self, url='sqlite:///db.sqlite3'):
+    def __init__(self):
+        url = 'sqlite:///packetlog/log.sqlite3'
         Base.metadata.create_all(bind=BaseEngine(url).engine)
         self.session = BaseSession(url).session
 

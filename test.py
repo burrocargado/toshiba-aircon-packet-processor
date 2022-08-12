@@ -18,7 +18,7 @@ client_id = f'python-mqtt-{random.randint(0, 1000)}'
 
 ac = Aircon(0x42)
 disp = Display()
-db = DB('sqlite:///packetlog/log.sqlite3')
+db = DB()
 
 def connect_mqtt():
     def on_connect(_client, _userdata, _flags, rc):
