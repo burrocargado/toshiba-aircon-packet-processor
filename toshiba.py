@@ -13,6 +13,7 @@ class State(IntEnum):
     QUERY1 = 3
     QUERY2 = 4
     SSAVE = 5
+    FILTER = 6
 
 class Aircon():
     mode = [
@@ -42,6 +43,7 @@ class Aircon():
         State.QUERY1: 'sensor query',
         State.QUERY2: 'extra query',
         State.SSAVE: 'setting save mode',
+        State.FILTER: 'resetting filter'
     }
 
     def __init__(self, addr):
@@ -52,6 +54,7 @@ class Aircon():
         self.q1_queue = [] # sensor query packet queue
         self.q2_queue = [] # extra query packet queue
         self.sv_queue = [] # seve mode setting packet queue
+        self.flt_queue = [] # filter resetting packet queue
         self.state = State.START
         self.addr = addr
 
@@ -79,6 +82,7 @@ class Aircon():
         self.q1_time = None
         self.q2_time = None
         self.sv_time = None
+        self.flt_time = None
 
     def send_cmd(self, p):
         if self.transmit is None:
@@ -117,6 +121,15 @@ class Aircon():
             self.transmit(self.sv_queue[0])
             self.sv_time = time.time()
 
+    def send_flt(self, p):
+        if self.transmit is None:
+            return
+        self.flt_queue.append(p)
+        if self.state == State.IDLE:
+            self.state = State.FILTER
+            self.transmit(self.flt_queue[0])
+            self.flt_time = time.time()
+
     def loop(self):
         if self.state == State.IDLE:
             if self.c_queue:
@@ -127,6 +140,10 @@ class Aircon():
                 self.state = State.SSAVE
                 self.transmit(self.sv_queue[0])
                 self.sv_time = time.time()
+            elif self.flt_queue:
+                self.state = State.FILTER
+                self.transmit(self.flt_queue[0])
+                self.flt_time = time.time()
             elif self.q1_queue:
                 self.state = State.QUERY1
                 self.transmit(self.q1_queue[0])
@@ -165,6 +182,14 @@ class Aircon():
                 # save mode not set, retry
                 self.transmit(self.sv_queue[0])
                 self.sv_time = time.time()
+        elif self.state == State.FILTER:
+            if self.filter == 0:
+                self.flt_queue.pop(0)
+                self.state = State.IDLE
+            elif time.time() - self.flt_time > RETRY_WAIT:
+                # filter not reset, retry
+                self.transmit(self.flt_queue[0])
+                self.flt_time = time.time()
         elif self.state == State.QUERY1:
             if time.time() - self.q1_time > RETRY_WAIT:
                 # no reply, retry
@@ -370,3 +395,14 @@ class Aircon():
             ck ^= c
         p.append(ck)
         self.send_sv(p)
+
+    def reset_filter(self):
+        p = [self.addr, 0xfe, 0x10]
+        payload = [0x00, 0x4b]
+        p.append(len(payload))
+        p += payload
+        ck = 0x0
+        for c in p:
+            ck ^= c
+        p.append(ck)
+        self.send_flt(p)
