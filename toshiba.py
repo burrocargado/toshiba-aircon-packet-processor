@@ -187,29 +187,24 @@ class Aircon():
 
     def parse_broadcast(self, p):
         if p[2] == 0x58:
-            self.state1 = p[6:14]
-            self.power = self.state1[0] & 0b1
-            self.mode = (self.state1[0] >> 5) & 0b111
-            self.save = (self.state1[0] >> 3) & 0b11
-            self.clean = (self.state1[1] >> 2) & 0b1
-            self.fan_lv = (self.state1[1] >> 5) & 0b111
-            self.filter = (self.state1[2] >> 7) & 0b1
-            self.vent = (self.state1[2] >> 2) & 0b1 # Not confirmed 
-            self.temp1 = (self.state1[4] >> 1) - 35
-            self.temp2 = (self.state1[5] >> 1) - 35
-            self.save1 = self.state1[7] & 0b1
+            payload = p[6:14]
+            self.state1 = payload
+            self.temp2 = (payload[5] >> 1) - 35
+            self.save1 = payload[7] & 0b1
             if self.state == State.START:
                 self.state = State.IDLE
-        if p[2] == 0x1c:
-            self.state2 = p[6:12]
-            self.power = self.state2[0] & 0b1
-            self.mode = (self.state2[0] >> 5) & 0b111
-            self.save = (self.state2[0] >> 3) & 0b11
-            self.clean = (self.state2[1] >> 2) & 0b1
-            self.fan_lv = (self.state2[1] >> 5) & 0b111
-            self.filter = (self.state2[2] >> 7) & 0b1
-            self.vent = (self.state2[2] >> 2) & 0b1 # Not confirmed
-            self.temp1 = (self.state2[4] >> 1) - 35
+        elif p[2] == 0x1c:
+            payload = p[6:12]
+            self.state2 = payload
+        if p[2] == 0x58 or p[2] == 0x1c:
+            self.power = payload[0] & 0b1
+            self.mode = (payload[0] >> 5) & 0b111
+            self.save = (payload[0] >> 3) & 0b11
+            self.clean = (payload[1] >> 2) & 0b1
+            self.fan_lv = (payload[1] >> 5) & 0b111
+            self.filter = (payload[2] >> 7) & 0b1
+            self.vent = (payload[2] >> 2) & 0b1 # Not confirmed
+            self.temp1 = (payload[4] >> 1) - 35
 
     def parse_params(self, p):
         if p[2] == 0x11:
