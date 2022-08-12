@@ -137,7 +137,7 @@ def run():
         update = {
             'power': 'ON' if ac.power == 1 else 'OFF',
             'mode': ac.mode_text(ac.mode),
-            'fan': 'ON' if ac.clean == 1 else 'OFF',
+            'clean': 'ON' if ac.clean == 1 else 'OFF',
             'fanlv': ac.fan_text(ac.fan_lv),
             'settmp': ac.temp1,
             'temp': ac.temp2,

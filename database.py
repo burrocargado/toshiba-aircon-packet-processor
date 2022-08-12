@@ -39,7 +39,7 @@ class Status(Base):
     time = Column(DateTime)
     power = Column(String(3))
     mode = Column(String(9))
-    fan = Column(String(2))
+    clean = Column(String(3))
     fanlv = Column(String(4))
     settmp = Column(Integer)
     temp = Column(Integer)
