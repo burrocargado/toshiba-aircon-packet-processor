@@ -228,7 +228,7 @@ class Aircon():
             self.clean = (payload[1] >> 2) & 0b1
             self.fan_lv = (payload[1] >> 5) & 0b111
             self.filter = (payload[2] >> 7) & 0b1
-            self.vent = (payload[2] >> 2) & 0b1 # Not confirmed
+            self.vent = (payload[2] >> 2) & 0b1 # this might be incorrect
             self.temp1 = (payload[4] >> 1) - 35
 
     def parse_params(self, p):
