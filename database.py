@@ -54,6 +54,10 @@ class Status(Base):
     sens_ts = Column(Integer)
     sens_ths = Column(Integer)
     sens_current = Column(Integer)
+    filter_time = Column(Integer)
+    filter = Column(String(3))
+    vent = Column(String(3))
+
 
 class DB():
 
