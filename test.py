@@ -62,11 +62,13 @@ def subscribe(client: mqtt_client):
                     line += f' {c:02X}'
                 disp.add_stat(1, line)
                 y = 7
-                disp.add_stat(y, f'Power:   {ac.power:1b}')
+                #disp.add_stat(y, f'Power:   {ac.power:1b}')
+                txt = 'ON' if ac.power else 'OFF'
+                disp.add_stat(y, f'Power:   {txt:3s}')
                 y +=1
                 disp.add_stat(y, f'Mode:    {ac.mode_text(ac.mode).title():9s}')
-                y +=1
-                disp.add_stat(y, f'Clean:   {ac.clean:1b}')
+                #y +=1
+                #disp.add_stat(y, f'Clean:   {ac.clean:1b}')
                 y +=1
                 disp.add_stat(y, f'FanLv:   {ac.fan_text(ac.fan_lv).title():4s}')
                 y +=1
@@ -74,7 +76,14 @@ def subscribe(client: mqtt_client):
                 y +=1
                 disp.add_stat(y, f'Temp:    {ac.temp2:2d}')
                 y +=1
-                disp.add_stat(y, f'Save:    {ac.save_text(ac.save).title():3s}')
+                disp.add_stat(y, f'Save:    {ac.save_text(ac.save).upper():3s}')
+
+            txt = 'Filter' if ac.filter else ''
+            disp.win_state.addstr(2, 52, f'{txt:6s}')
+            txt = 'Ventilation' if ac.vent else ''
+            disp.win_state.addstr(1, 47, f'{txt:11s}')
+            txt = 'Cleaning' if ac.clean else ''
+            disp.win_state.addstr(1, 37, f'{txt:8s}')
 
             if ac.params:
                 line = 'params: '
@@ -178,9 +187,15 @@ def run():
         elif c == ord('f'):
             ac.set_fan('A')
         elif c == ord('1'):
-            ac.set_save('S')
+            ac.set_power(True)
         elif c == ord('2'):
+            ac.set_power(False)
+        elif c == ord('3'):
+            ac.set_save('S')
+        elif c == ord('4'):
             ac.set_save('R')
+        #elif c == ord('0'):
+        #    ac.reset_filter()
         elif c == ord('e'):
             temp = ac.temp1
             if temp > ac.__class__.MIN_TMP:
