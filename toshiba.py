@@ -66,6 +66,8 @@ class Aircon():
         self.temp1 = None
         self.temp2 = None
         self.save = None
+        self.filter = None
+        self.vent = None
         self.pwr_lv1 = 0
         self.pwr_lv2 = 0
         self.filter_time = 0
@@ -191,6 +193,8 @@ class Aircon():
             self.save = (self.state1[0] >> 3) & 0b11
             self.clean = (self.state1[1] >> 2) & 0b1
             self.fan_lv = (self.state1[1] >> 5) & 0b111
+            self.filter = (self.state1[2] >> 7) & 0b1
+            self.vent = (self.state1[2] >> 2) & 0b1 # Not confirmed 
             self.temp1 = (self.state1[4] >> 1) - 35
             self.temp2 = (self.state1[5] >> 1) - 35
             self.save1 = self.state1[7] & 0b1
@@ -203,6 +207,8 @@ class Aircon():
             self.save = (self.state2[0] >> 3) & 0b11
             self.clean = (self.state2[1] >> 2) & 0b1
             self.fan_lv = (self.state2[1] >> 5) & 0b111
+            self.filter = (self.state2[2] >> 7) & 0b1
+            self.vent = (self.state2[2] >> 2) & 0b1 # Not confirmed
             self.temp1 = (self.state2[4] >> 1) - 35
 
     def parse_params(self, p):
