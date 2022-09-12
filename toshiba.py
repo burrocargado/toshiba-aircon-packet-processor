@@ -158,6 +158,8 @@ class Aircon():
                 self.update_cb()
                 self.update = False
             elif time.time() - self.q_time > QUERY_INTERVAL:
+                self.power_query()
+                self.filter_query()
                 self.sensor_query(0x02)
                 self.sensor_query(0x03)
                 self.sensor_query(0x04)
@@ -167,8 +169,6 @@ class Aircon():
                 self.sensor_query(0x63)
                 self.sensor_query(0x65)
                 self.sensor_query(0x6a)
-                self.power_query()
-                self.filter_query()
                 self.q_time = time.time()
                 self.update = True
         elif self.state == State.CMD:
