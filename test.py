@@ -98,6 +98,22 @@ def subscribe(client: mqtt_client):
         elif msg.topic == 'aircon/packet/error':
             status = msg.payload
             db.write_packet(status)
+        elif msg.topic == 'aircon/control':
+            ctrl = json.loads(msg.payload)
+            if 'set_power' in ctrl:
+                v = ctrl['set_power']
+                if v == 'on':
+                    ac.set_power(True)
+                elif v == 'off':
+                    ac.set_power(False)
+            if 'set_temp' in ctrl:
+                ac.set_temp(ctrl['set_temp'])
+            if 'set_fan' in ctrl:
+                ac.set_fan(ctrl['set_fan'])
+            if 'set_mode' in ctrl:
+                ac.set_mode(ctrl['set_mode'])
+            if 'set_save' in ctrl:
+                ac.set_save(ctrl['set_save'])
 
     client.subscribe(TOPIC)
     client.on_message = on_message
