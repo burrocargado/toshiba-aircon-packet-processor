@@ -31,7 +31,7 @@ class Aircon():
     ]
     fan = [
         (0b101, 'L', 'low'),
-        (0b100, 'M', 'mid'),
+        (0b100, 'M', 'med'),
         (0b011, 'H', 'high'),
         (0b010, 'A', 'auto')
     ]
