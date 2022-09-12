@@ -347,9 +347,11 @@ class Aircon():
         self.send_cmd(p)
 
     def set_temp(self, temp):
+        assert self.state != State.START
         self.set_cmd(HEAD_TMP, self.mode, self.fan_lv, temp)
 
     def set_fan(self, fan):
+        assert self.state != State.START
         fan_lv = None
         for d, cmd, label in self.__class__.fan:
             if cmd == fan:
@@ -393,6 +395,7 @@ class Aircon():
         self.extra_query(0x9e)
 
     def set_save(self, save):
+        assert self.state != State.START
         value = None
         for d, cmd, label in self.__class__.save:
             if cmd == save:
