@@ -1,5 +1,6 @@
 from enum import IntEnum
 import time
+import struct
 
 HEAD_TMP = 0b01
 HEAD_FAN = 0b10
@@ -247,7 +248,7 @@ class Aircon():
             if self.state == State.QUERY1:
                 p0 = self.q1_queue.pop(0)
                 if p[8] == 0x2c:
-                    self.sensor[p0[11]] = p[10]
+                    self.sensor[p0[11]] = struct.unpack('>h', bytes(p[9:11]))[0]
                 else:
                     self.sensor[p0[11]] = None
                 self.state = State.IDLE
