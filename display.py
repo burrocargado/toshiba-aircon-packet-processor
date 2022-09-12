@@ -30,8 +30,6 @@ class Display():
         self.win_raw = win_raw
         self.win_state = win_state
 
-        self.ctr = 0
-
     def quit(self):
         curses.nocbreak()
         self.stdscr.keypad(False)
@@ -53,14 +51,7 @@ class Display():
         self.win_raw.noutrefresh()
         self.win_state.noutrefresh()
 
-        # avoid cursor displayed at random position
-        self.stdscr.move(16, 120)
-        if self.ctr & 1 == 0:
-            self.stdscr.addch('.')
-        else:
-            self.stdscr.addch(' ')
         curses.doupdate()
-        self.ctr += 1
 
     def getch(self):
         c = self.stdscr.getch()
