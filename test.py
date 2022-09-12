@@ -161,7 +161,7 @@ def run():
     ac.transmit = transmit
     ac.update_cb = update_sensors
     while True:
-        client.loop()
+        client.loop(timeout=0.01)
         ac.loop()
         line = 'State:   '
         line += ac.state_text().capitalize()
