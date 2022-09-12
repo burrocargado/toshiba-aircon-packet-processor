@@ -5,6 +5,7 @@ Tested with NTS-F1403Y1 released 2004.
 import random
 import ssl
 #import time
+import json
 
 from paho.mqtt import client as mqtt_client
 
@@ -157,9 +158,43 @@ def run():
             'vent': 'ON' if ac.vent == 1 else 'OFF',
         }
         db.write_status(update)
+        data = {
+            'pwrlv1': ac.pwr_lv1,
+            'pwrlv2': ac.pwr_lv2,
+            'filter_time': ac.filter_time,
+            'sens_ta': ac.sensor[0x02],
+            'sens_tcj': ac.sensor[0x03],
+            'sens_tc': ac.sensor[0x04],
+            'sens_te': ac.sensor[0x60],
+            'sens_to': ac.sensor[0x61],
+            'sens_td': ac.sensor[0x62],
+            'sens_ts': ac.sensor[0x63],
+            'sens_ths': ac.sensor[0x65],
+            'sens_current': ac.sensor[0x6a],
+        }
+        #update = {'update': data}
+        #result = client.publish('aircon/update', json.dumps(update))
+        result = client.publish('aircon/update', json.dumps(data))
+
+    def update_status():
+        data = {
+            'power': 'on' if ac.power == 1 else 'off',
+            'mode': ac.mode_text(ac.mode),
+            'clean': 'on' if ac.clean == 1 else 'off',
+            'fanlv': ac.fan_text(ac.fan_lv),
+            'settmp': ac.temp1,
+            'temp': ac.temp2,
+            'filter': 'on' if ac.filter == 1 else 'off',
+            'vent': 'on' if ac.vent == 1 else 'off',
+            'save': ac.save_text(ac.save),
+        }
+        #update = {'status': data}
+        #result = client.publish('aircon/status', json.dumps(update))
+        result = client.publish('aircon/status', json.dumps(data))
 
     ac.transmit = transmit
     ac.update_cb = update_sensors
+    ac.status_cb = update_status
     while True:
         client.loop(timeout=0.01)
         ac.loop()

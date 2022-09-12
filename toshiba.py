@@ -49,6 +49,7 @@ class Aircon():
     def __init__(self, addr):
         self.transmit = None
         self.update_cb = None
+        self.status_cb = None
         self.update = False
         self.c_queue = [] # command packet queue
         self.q1_queue = [] # sensor query packet queue
@@ -230,6 +231,8 @@ class Aircon():
             self.filter = (payload[2] >> 7) & 0b1
             self.vent = (payload[2] >> 2) & 0b1 # this might be incorrect
             self.temp1 = (payload[4] >> 1) - 35
+            if self.status_cb:
+                self.status_cb()
 
     def parse_params(self, p):
         if p[2] == 0x11:
