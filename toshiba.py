@@ -1,4 +1,5 @@
 from enum import IntEnum
+from collections import namedtuple
 import time
 import struct
 
@@ -16,29 +17,40 @@ class State(IntEnum):
     SSAVE = 5
     FILTER = 6
 
+CmdSetItem = namedtuple('CmdSetItem', 'bits cmd text')
+CommandSets = namedtuple('CommandSets', 'power mode fan save')
+CMDSETS = CommandSets(
+    # power
+    (
+        CmdSetItem(0b1, '1', 'on'),
+        CmdSetItem(0b0, '0', 'off')
+    ),
+    # mode
+    (
+        CmdSetItem(0b001, 'H', 'heat'),
+        CmdSetItem(0b010, 'C', 'cool'),
+        CmdSetItem(0b011, 'F', 'fan'),
+        CmdSetItem(0b100, 'D', 'dry'),
+        CmdSetItem(0b101, 'A', 'auto heat'),
+        CmdSetItem(0b110, '', 'auto cool')
+    ),
+    # fan
+    (
+        CmdSetItem(0b101, 'L', 'low'),
+        CmdSetItem(0b100, 'M', 'med'),
+        CmdSetItem(0b011, 'H', 'high'),
+        CmdSetItem(0b010, 'A', 'auto')
+    ),
+    # save mode
+    (
+        CmdSetItem(0b11, 'R', 'off'),
+        CmdSetItem(0b00, 'S', 'on')
+    )
+)
+
+
 class Aircon():
-    power = [
-        (0b1, '1', 'on'),
-        (0b0, '0', 'off')
-    ]
-    mode = [
-        (0x01, 'H', 'heat'),
-        (0x02, 'C', 'cool'),
-        (0x03, 'F', 'fan'),
-        (0x04, 'D', 'dry'),
-        (0x05, 'A', 'auto heat'),
-        (0x06, '', 'auto cool')
-    ]
-    save = [
-        (0b11, 'R', 'off'),
-        (0b00, 'S', 'on')
-    ]
-    fan = [
-        (0b101, 'L', 'low'),
-        (0b100, 'M', 'med'),
-        (0b011, 'H', 'high'),
-        (0b010, 'A', 'auto')
-    ]
+
     MAX_TMP = 29
     MIN_TMP = 18
     state_dict = {
@@ -267,51 +279,30 @@ class Aircon():
                     self.filter_time = (p[9] << 8) + p[10]
                 self.state = State.IDLE
 
-    def power_text(self, val):
-        for d, cmd, label in self.__class__.power:
-            if d == val:
-                text = label
-                break
-        return text
-
-    def mode_text(self, val):
-        text = f'{val:03b}'
-        for d, cmd, label in self.__class__.mode:
-            if d == val:
-                text = label
-                break
-        return text
-
-    def save_text(self, val):
-        text = f'{val:02b}'
-        for d, cmd, label in self.__class__.save:
-            if d == val:
-                text = label
-                break
-        return text
-
-    def fan_text(self, val):
-        text = f'{val:03b}'
-        for d, cmd, label in self.__class__.fan:
-            if d == val:
-                text = label
+    def bits_to_text(self, cmdtype, bits):
+        text = f'{bits:b}'
+        for csi in getattr(CMDSETS, cmdtype):
+            if csi.bits == bits:
+                text = csi.text
                 break
         return text
 
     def state_text(self):
         return self.__class__.state_dict[self.state]
 
-    def set_power(self, value):
+    def cmd_to_bits(self, cmdtype, cmd):
+        bits = None
+        for csi in getattr(CMDSETS, cmdtype):
+            if csi.cmd == cmd:
+                bits = csi.bits
+                break
+        assert bits is not None
+        return bits
+
+    def set_power(self, cmd):
         p = [self.addr, 0x00, 0x11]
         payload = [0x08, 0x41]
-
-        bit = None
-        for d, cmd, label in self.__class__.power:
-            if cmd == value:
-                bit = d
-                break
-        assert bit is not None
-        byte = 0x02 | bit
+        byte = 0x02 | self.cmd_to_bits('power', cmd)
         payload.append(byte)
         p.append(len(payload))
         p += payload
@@ -321,15 +312,10 @@ class Aircon():
         p.append(ck)
         self.send_cmd(p)
 
-    def set_mode(self, mode):
+    def set_mode(self, cmd):
         p = [self.addr, 0x00, 0x11]
         payload = [0x08, 0x42]
-        byte = None
-        for d, cmd, label in self.__class__.mode:
-            if cmd == mode:
-                byte = d
-                break
-        assert byte is not None
+        byte = self.cmd_to_bits('mode', cmd)
         payload.append(byte)
         p.append(len(payload))
         p += payload
@@ -366,14 +352,9 @@ class Aircon():
         assert self.state != State.START
         self.set_cmd(HEAD_TMP, self.mode, self.fan_lv, temp)
 
-    def set_fan(self, fan):
+    def set_fan(self, cmd):
         assert self.state != State.START
-        fan_lv = None
-        for d, cmd, label in self.__class__.fan:
-            if cmd == fan:
-                fan_lv = d
-                break
-        assert fan_lv is not None
+        fan_lv = self.cmd_to_bits('fan', cmd)
         self.set_cmd(HEAD_FAN, self.mode, fan_lv, self.temp1)
 
     def sensor_query(self, id):

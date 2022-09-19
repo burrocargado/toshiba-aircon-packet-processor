@@ -63,21 +63,19 @@ def subscribe(client: mqtt_client):
                     line += f' {c:02X}'
                 disp.add_stat(1, line)
                 y = 7
-                #disp.add_stat(y, f'Power:   {ac.power:1b}')
-                txt = 'ON' if ac.power else 'OFF'
-                disp.add_stat(y, f'Power:   {txt:3s}')
+                disp.add_stat(y, f"Power:   {ac.bits_to_text('power', ac.power).title():3s}")
                 y +=1
-                disp.add_stat(y, f'Mode:    {ac.mode_text(ac.mode).title():9s}')
+                disp.add_stat(y, f"Mode:    {ac.bits_to_text('mode', ac.mode).title():9s}")
                 #y +=1
                 #disp.add_stat(y, f'Clean:   {ac.clean:1b}')
                 y +=1
-                disp.add_stat(y, f'FanLv:   {ac.fan_text(ac.fan_lv).title():4s}')
+                disp.add_stat(y, f"FanLv:   {ac.bits_to_text('fan', ac.fan_lv).title():4s}")
                 y +=1
                 disp.add_stat(y, f'SetTemp: {ac.temp1:2d}')
                 y +=1
                 disp.add_stat(y, f'Temp:    {ac.temp2:2d}')
                 y +=1
-                disp.add_stat(y, f'Save:    {ac.save_text(ac.save).upper():3s}')
+                disp.add_stat(y, f"Save:    {ac.bits_to_text('save', ac.save).title():3s}")
 
             txt = 'Filter' if ac.filter else ''
             disp.win_state.addstr(2, 52, f'{txt:6s}')
@@ -148,10 +146,10 @@ def run():
         disp.add_stat(y, f'{line:30s}')
 
         update = {
-            'power': ac.power_text(ac.power),
-            'mode': ac.mode_text(ac.mode),
+            'power': ac.bits_to_text('power', ac.power),
+            'mode': ac.bits_to_text('mode', ac.mode),
             'clean': 'ON' if ac.clean == 1 else 'OFF',
-            'fanlv': ac.fan_text(ac.fan_lv),
+            'fanlv': ac.bits_to_text('fan', ac.fan_lv),
             'settmp': ac.temp1,
             'temp': ac.temp2,
             'pwrlv1': ac.pwr_lv1,
@@ -190,15 +188,15 @@ def run():
 
     def update_status():
         data = {
-            'power': ac.power_text(ac.power),
-            'mode': ac.mode_text(ac.mode),
+            'power': ac.bits_to_text('power', ac.power),
+            'mode': ac.bits_to_text('mode', ac.mode),
             'clean': 'on' if ac.clean == 1 else 'off',
-            'fanlv': ac.fan_text(ac.fan_lv),
+            'fanlv': ac.bits_to_text('fan', ac.fan_lv),
             'settmp': ac.temp1,
             'temp': ac.temp2,
             'filter': 'on' if ac.filter == 1 else 'off',
             'vent': 'on' if ac.vent == 1 else 'off',
-            'save': ac.save_text(ac.save),
+            'save': ac.bits_to_text('save', ac.save),
         }
         #update = {'status': data}
         #result = client.publish('aircon/status', json.dumps(update))
