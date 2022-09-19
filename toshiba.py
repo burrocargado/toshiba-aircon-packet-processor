@@ -362,32 +362,34 @@ class Aircon():
         fan_lv = self.cmd_to_bits('fan', cmd)
         self.set_cmd(HEAD_FAN, self.mode, fan_lv, self.temp1)
 
-    def sensor_query(self, id):
-        assert id < 0xff
-        p = [self.addr, 0x00, 0x17]
-        payload = [0x08, 0x80]
-        payload += [0xef, 0x00, 0x2c, 0x08, 0x00]
-        payload.append(id)
+    def gen_pkt(self, header, payload):
+        assert len(header) == 3
+        p = []
+        p += header
         p.append(len(payload))
         p += payload
         ck = 0x0
         for c in p:
             ck ^= c
         p.append(ck)
+        return p
+
+    def sensor_query(self, id):
+        assert id < 0xff
+        header = [self.addr, 0x00, 0x17]
+        payload = [0x08, 0x80]
+        payload += [0xef, 0x00, 0x2c, 0x08, 0x00]
+        payload.append(id)
+        p = self.gen_pkt(header, payload)
         self.send_query1(p)
 
     def extra_query(self, id):
         assert id in [0x94, 0x9e]
-        p = [self.addr, 0x00, 0x15]
+        header = [self.addr, 0x00, 0x15]
         payload = [0x08, 0xe8]
         payload += [0x00, 0x01, 0x00]
         payload.append(id)
-        p.append(len(payload))
-        p += payload
-        ck = 0x0
-        for c in p:
-            ck ^= c
-        p.append(ck)
+        p = self.gen_pkt(header, payload)
         self.send_query2(p)
 
     def power_query(self):
@@ -399,7 +401,7 @@ class Aircon():
     def set_save(self, cmd):
         assert self.state != State.START
         bits = self.cmd_to_bits('save', cmd)
-        p = [self.addr, 0xfe, 0x10]
+        header = [self.addr, 0xfe, 0x10]
         payload = [0x00, 0x4c]
         a = 0b100000 | self.mode
         payload.append(a)
@@ -407,12 +409,7 @@ class Aircon():
         payload.append(a)
         a = (self.temp1 + 35) << 1
         payload.append(a)
-        p.append(len(payload))
-        p += payload
-        ck = 0x0
-        for c in p:
-            ck ^= c
-        p.append(ck)
+        p = self.gen_pkt(header, payload)
         self.send_sv(p)
 
     def reset_filter(self):
