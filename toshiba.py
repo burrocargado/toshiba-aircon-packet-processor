@@ -396,19 +396,14 @@ class Aircon():
     def filter_query(self):
         self.extra_query(0x9e)
 
-    def set_save(self, save):
+    def set_save(self, cmd):
         assert self.state != State.START
-        value = None
-        for d, cmd, label in self.__class__.save:
-            if cmd == save:
-                value = d
-                break
-        assert value is not None
+        bits = self.cmd_to_bits('save', cmd)
         p = [self.addr, 0xfe, 0x10]
         payload = [0x00, 0x4c]
         a = 0b100000 | self.mode
         payload.append(a)
-        a = value << 4 | 0b1000 | self.fan_lv
+        a = bits << 4 | 0b1000 | self.fan_lv
         payload.append(a)
         a = (self.temp1 + 35) << 1
         payload.append(a)
