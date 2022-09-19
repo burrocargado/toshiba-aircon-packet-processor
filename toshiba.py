@@ -17,6 +17,23 @@ class State(IntEnum):
     SSAVE = 5
     FILTER = 6
 
+    def __str__(self):
+        if self.value == 0:
+            text = 'starting up'
+        elif self.value == 1:
+            text = 'idle'
+        elif self.value == 2:
+            text = 'command sent'
+        elif self.value == 3:
+            text = 'sensor query'
+        elif self.value == 4:
+            text = 'extra query'
+        elif self.value == 5:
+            text = 'setting save mode'
+        elif self.value == 6:
+            text = 'resetting filter'
+        return text
+
 CmdSetItem = namedtuple('CmdSetItem', 'bits cmd text')
 CommandSets = namedtuple('CommandSets', 'power mode fan save')
 CMDSETS = CommandSets(
@@ -53,15 +70,6 @@ class Aircon():
 
     MAX_TMP = 29
     MIN_TMP = 18
-    state_dict = {
-        State.START: 'starting up',
-        State.IDLE: 'idle',
-        State.CMD: 'command sent',
-        State.QUERY1: 'sensor query',
-        State.QUERY2: 'extra query',
-        State.SSAVE: 'setting save mode',
-        State.FILTER: 'resetting filter'
-    }
 
     def __init__(self, addr):
         self.transmit = None
@@ -286,9 +294,6 @@ class Aircon():
                 text = csi.text
                 break
         return text
-
-    def state_text(self):
-        return self.__class__.state_dict[self.state]
 
     def cmd_to_bits(self, cmdtype, cmd):
         bits = None

@@ -209,7 +209,7 @@ def run():
         client.loop(timeout=0.01)
         ac.loop()
         line = 'State:   '
-        line += ac.state_text().capitalize()
+        line += str(ac.state).capitalize()
         disp.add_stat(15, f'{line:36s}')
         disp.loop()
         c = disp.getch()
