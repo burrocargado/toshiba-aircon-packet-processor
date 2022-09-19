@@ -17,6 +17,10 @@ class State(IntEnum):
     FILTER = 6
 
 class Aircon():
+    power = [
+        (0b1, '1', 'on'),
+        (0b0, '0', 'off')
+    ]
     mode = [
         (0x01, 'H', 'heat'),
         (0x02, 'C', 'cool'),
@@ -263,6 +267,13 @@ class Aircon():
                     self.filter_time = (p[9] << 8) + p[10]
                 self.state = State.IDLE
 
+    def power_text(self, val):
+        for d, cmd, label in self.__class__.power:
+            if d == val:
+                text = label
+                break
+        return text
+
     def mode_text(self, val):
         text = f'{val:03b}'
         for d, cmd, label in self.__class__.mode:
@@ -291,12 +302,16 @@ class Aircon():
         return self.__class__.state_dict[self.state]
 
     def set_power(self, value):
-        """
-        value: True: ON, False: OFF
-        """
         p = [self.addr, 0x00, 0x11]
         payload = [0x08, 0x41]
-        byte = 0x03 if value else 0x02
+
+        bit = None
+        for d, cmd, label in self.__class__.power:
+            if cmd == value:
+                bit = d
+                break
+        assert bit is not None
+        byte = 0x02 | bit
         payload.append(byte)
         p.append(len(payload))
         p += payload

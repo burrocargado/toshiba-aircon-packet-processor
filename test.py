@@ -101,11 +101,7 @@ def subscribe(client: mqtt_client):
         elif msg.topic == 'aircon/control':
             ctrl = json.loads(msg.payload)
             if 'set_power' in ctrl:
-                v = ctrl['set_power']
-                if v == 'on':
-                    ac.set_power(True)
-                elif v == 'off':
-                    ac.set_power(False)
+                ac.set_power(ctrl['set_power'])
             if 'set_temp' in ctrl:
                 ac.set_temp(ctrl['set_temp'])
             if 'set_fan' in ctrl:
@@ -152,7 +148,7 @@ def run():
         disp.add_stat(y, f'{line:30s}')
 
         update = {
-            'power': 'ON' if ac.power == 1 else 'OFF',
+            'power': ac.power_text(ac.power),
             'mode': ac.mode_text(ac.mode),
             'clean': 'ON' if ac.clean == 1 else 'OFF',
             'fanlv': ac.fan_text(ac.fan_lv),
@@ -194,7 +190,7 @@ def run():
 
     def update_status():
         data = {
-            'power': 'on' if ac.power == 1 else 'off',
+            'power': ac.power_text(ac.power),
             'mode': ac.mode_text(ac.mode),
             'clean': 'on' if ac.clean == 1 else 'off',
             'fanlv': ac.fan_text(ac.fan_lv),
@@ -241,9 +237,9 @@ def run():
         elif c == ord('f'):
             ac.set_fan('A')
         elif c == ord('1'):
-            ac.set_power(True)
+            ac.set_power('1')
         elif c == ord('2'):
-            ac.set_power(False)
+            ac.set_power('0')
         elif c == ord('3'):
             ac.set_save('S')
         elif c == ord('4'):
