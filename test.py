@@ -246,12 +246,12 @@ def run():
         #    ac.reset_filter()
         elif c == ord('e'):
             temp = ac.temp1
-            if temp > ac.__class__.MIN_TMP:
+            if temp > ac.MIN_TMP:
                 temp -= 1
                 ac.set_temp(temp)
         elif c == ord('r'):
             temp = ac.temp1
-            if temp < ac.__class__.MAX_TMP:
+            if temp < ac.MAX_TMP:
                 temp += 1
                 ac.set_temp(temp)
 

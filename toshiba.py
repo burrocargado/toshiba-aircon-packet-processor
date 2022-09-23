@@ -335,8 +335,8 @@ class Aircon():
     def set_cmd(self, head, mode, fan_lv, temp):
         assert mode is not None
         assert fan_lv is not None
-        assert temp >= self.__class__.MIN_TMP
-        assert temp <= self.__class__.MAX_TMP
+        assert temp >= self.MIN_TMP
+        assert temp <= self.MAX_TMP
         header = [self.addr, 0x00, 0x11]
         payload = [0x08, 0x4c]
         mode = mode & 0b111
