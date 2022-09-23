@@ -296,6 +296,7 @@ class Aircon():
         return text
 
     def cmd_to_bits(self, cmdtype, cmd):
+        assert cmd != ''
         bits = None
         for csi in getattr(CMDSETS, cmdtype):
             if csi.cmd == cmd:
