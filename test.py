@@ -181,14 +181,14 @@ def run():
         y +=1
         disp.add_stat(y, f"Save:    {ac.bits_to_text('save', ac.save).title():3s}")
 
-        txt = 'Filter' if ac.filter else ''
-        disp.win_state.addstr(2, 52, f'{txt:6s}')
         txt = 'Ventilation' if ac.vent else ''
-        disp.win_state.addstr(1, 47, f'{txt:11s}')
-        txt = 'Cleaning' if ac.clean else ''
-        disp.win_state.addstr(1, 37, f'{txt:8s}')
+        disp.win_state.addstr(9, 47, f'{txt:11s}')
         txt = 'Humidifier' if ac.humid else ''
-        disp.win_state.addstr(2, 37, f'{txt:10s}')
+        disp.win_state.addstr(10, 47, f'{txt:10s}')
+        txt = 'Filter' if ac.filter else ''
+        disp.win_state.addstr(11, 47, f'{txt:6s}')
+        txt = 'Cleaning' if ac.clean else ''
+        disp.win_state.addstr(12, 47, f'{txt:8s}')
 
         data = {
             'power': ac.bits_to_text('power', ac.power),
