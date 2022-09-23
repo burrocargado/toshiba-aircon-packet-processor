@@ -50,25 +50,8 @@ def subscribe(client: mqtt_client):
             packet = msg.payload
             ac.parse(packet)
             db.write_packet('RX', packet)
-            line = ''
-            for c in packet[:-1]:
-                line += f'{c:02X} '
-            c = packet[-1]
-            line += f'{c:02X}'
-            disp.print_raw(line)
-
-            if ac.state1:
-                line = 'State1: '
-                for c in ac.state1:
-                    line += f' {c:02X}'
-                disp.add_stat(1, line)
-
-            if ac.params:
-                line = 'params: '
-                for c in ac.params:
-                    line += f' {c:02X}'
-                disp.add_stat(2, line)
-
+            if disp:
+                disp.on_message(packet, ac)
         elif msg.topic == 'aircon/packet/tx':
             packet = msg.payload
             db.write_packet('TX', packet)
@@ -94,35 +77,17 @@ def subscribe(client: mqtt_client):
 def run():
     client = connect_mqtt()
     subscribe(client)
+
     def transmit(p):
         result = client.publish('aircon/packet/tx', bytearray(p))
         # result: [0, 1]
         status = result[0]
-        if status == 0:
-            line = 'Sent:    '
-        else:
-            line = 'Failed:  '
-        for a in p:
-            line += f'{a:02X} '
-        disp.add_stat(14, f'{line:55s}')
+        if disp:
+            disp.send_status(p, status)
 
     def update_sensors():
-        y = 3
-        line = 'Sensors: '
-        line += str({k: ac.sensor[k] for k in [0x02, 0x03, 0x04, 0x65, 0x6a]})
-        disp.add_stat(y, f'{line:55s}')
-        y +=1
-        line = 'Sensors: '
-        line += str({k: ac.sensor[k] for k in [0x60, 0x61, 0x62, 0x63]})
-        disp.add_stat(y, f'{line:55s}')
-        y +=1
-        line = 'PwrLv:   '
-        line += f'{ac.pwr_lv1:02d}, {ac.pwr_lv2:03d}'
-        disp.add_stat(y, f'{line:30s}')
-        y +=1
-        line = 'Filter:  '
-        line += '{:04d} H'.format(ac.filter_time)
-        disp.add_stat(y, f'{line:30s}')
+        if disp:
+            disp.disp_sensors(ac)
 
         update = {
             'power': ac.bits_to_text('power', ac.power),
@@ -166,29 +131,8 @@ def run():
         result = client.publish('aircon/update', json.dumps(data))
 
     def update_status():
-        y = 7
-        disp.add_stat(y, f"Power:   {ac.bits_to_text('power', ac.power).title():3s}")
-        y +=1
-        disp.add_stat(y, f"Mode:    {ac.bits_to_text('mode', ac.mode).title():9s}")
-        #y +=1
-        #disp.add_stat(y, f'Clean:   {ac.clean:1b}')
-        y +=1
-        disp.add_stat(y, f"FanLv:   {ac.bits_to_text('fan', ac.fan_lv).title():4s}")
-        y +=1
-        disp.add_stat(y, f'SetTemp: {ac.temp1:2d}')
-        y +=1
-        disp.add_stat(y, f'Temp:    {ac.temp2:2d}')
-        y +=1
-        disp.add_stat(y, f"Save:    {ac.bits_to_text('save', ac.save).title():3s}")
-
-        txt = 'Ventilation' if ac.vent else ''
-        disp.win_state.addstr(9, 47, f'{txt:11s}')
-        txt = 'Humidifier' if ac.humid else ''
-        disp.win_state.addstr(10, 47, f'{txt:10s}')
-        txt = 'Filter' if ac.filter else ''
-        disp.win_state.addstr(11, 47, f'{txt:6s}')
-        txt = 'Cleaning' if ac.clean else ''
-        disp.win_state.addstr(12, 47, f'{txt:8s}')
+        if disp:
+            disp.disp_status(ac)
 
         data = {
             'power': ac.bits_to_text('power', ac.power),
@@ -208,54 +152,12 @@ def run():
     ac.transmit = transmit
     ac.update_cb = update_sensors
     ac.status_cb = update_status
+
     while True:
         client.loop(timeout=0.01)
         ac.loop()
-        line = 'State:   '
-        line += str(ac.state).capitalize()
-        disp.add_stat(15, f'{line:36s}')
-        disp.loop()
-        c = disp.getch()
-        if c == ord('q'):
-            disp.quit()
-            break
-        elif c == ord('z'):
-            ac.set_mode('A')
-        elif c == ord('x'):
-            ac.set_mode('H')
-        elif c == ord('c'):
-            ac.set_mode('D')
-        elif c == ord('v'):
-            ac.set_mode('C')
-        elif c == ord('b'):
-            ac.set_mode('F')
-        elif c == ord('a'):
-            ac.set_fan('L')
-        elif c == ord('s'):
-            ac.set_fan('M')
-        elif c == ord('d'):
-            ac.set_fan('H')
-        elif c == ord('f'):
-            ac.set_fan('A')
-        elif c == ord('1'):
-            ac.set_power('1')
-        elif c == ord('2'):
-            ac.set_power('0')
-        elif c == ord('3'):
-            ac.set_save('S')
-        elif c == ord('4'):
-            ac.set_save('R')
-        #elif c == ord('0'):
-        #    ac.reset_filter()
-        elif c == ord('e'):
-            temp = ac.temp1
-            if temp > ac.MIN_TMP:
-                temp -= 1
-                ac.set_temp(temp)
-        elif c == ord('r'):
-            temp = ac.temp1
-            if temp < ac.MAX_TMP:
-                temp += 1
-                ac.set_temp(temp)
+        if disp:
+            if disp.loop(ac):
+                break
 
 run()
