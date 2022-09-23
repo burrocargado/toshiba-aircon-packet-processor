@@ -304,64 +304,6 @@ class Aircon():
         assert bits is not None
         return bits
 
-    def set_power(self, cmd):
-        p = [self.addr, 0x00, 0x11]
-        payload = [0x08, 0x41]
-        byte = 0x02 | self.cmd_to_bits('power', cmd)
-        payload.append(byte)
-        p.append(len(payload))
-        p += payload
-        ck = 0x0
-        for c in p:
-            ck ^= c
-        p.append(ck)
-        self.send_cmd(p)
-
-    def set_mode(self, cmd):
-        p = [self.addr, 0x00, 0x11]
-        payload = [0x08, 0x42]
-        byte = self.cmd_to_bits('mode', cmd)
-        payload.append(byte)
-        p.append(len(payload))
-        p += payload
-        ck = 0x0
-        for c in p:
-            ck ^= c
-        p.append(ck)
-        self.send_cmd(p)
-
-    def set_cmd(self, head, mode, fan_lv, temp):
-        assert mode is not None
-        assert fan_lv is not None
-        assert temp >= self.__class__.MIN_TMP
-        assert temp <= self.__class__.MAX_TMP
-        p = [self.addr, 0x00, 0x11]
-        payload = [0x08, 0x4c]
-        mode = mode & 0b111
-        byte = head << 3 | mode
-        payload.append(byte)
-        fan_lv = fan_lv & 0b111
-        byte = 0b111000 | fan_lv
-        payload.append(byte)
-        temp = (temp + 35) << 1
-        payload.append(temp)
-        p.append(len(payload))
-        p += payload
-        ck = 0x0
-        for c in p:
-            ck ^= c
-        p.append(ck)
-        self.send_cmd(p)
-
-    def set_temp(self, temp):
-        assert self.state != State.START
-        self.set_cmd(HEAD_TMP, self.mode, self.fan_lv, temp)
-
-    def set_fan(self, cmd):
-        assert self.state != State.START
-        fan_lv = self.cmd_to_bits('fan', cmd)
-        self.set_cmd(HEAD_FAN, self.mode, fan_lv, self.temp1)
-
     def gen_pkt(self, header, payload):
         assert len(header) == 3
         p = []
@@ -373,6 +315,49 @@ class Aircon():
             ck ^= c
         p.append(ck)
         return p
+
+    def set_power(self, cmd):
+        header = [self.addr, 0x00, 0x11]
+        payload = [0x08, 0x41]
+        byte = 0x02 | self.cmd_to_bits('power', cmd)
+        payload.append(byte)
+        p = self.gen_pkt(header, payload)
+        self.send_cmd(p)
+
+    def set_mode(self, cmd):
+        header = [self.addr, 0x00, 0x11]
+        payload = [0x08, 0x42]
+        byte = self.cmd_to_bits('mode', cmd)
+        payload.append(byte)
+        p = self.gen_pkt(header, payload)
+        self.send_cmd(p)
+
+    def set_cmd(self, head, mode, fan_lv, temp):
+        assert mode is not None
+        assert fan_lv is not None
+        assert temp >= self.__class__.MIN_TMP
+        assert temp <= self.__class__.MAX_TMP
+        header = [self.addr, 0x00, 0x11]
+        payload = [0x08, 0x4c]
+        mode = mode & 0b111
+        byte = head << 3 | mode
+        payload.append(byte)
+        fan_lv = fan_lv & 0b111
+        byte = 0b111000 | fan_lv
+        payload.append(byte)
+        temp = (temp + 35) << 1
+        payload.append(temp)
+        p = self.gen_pkt(header, payload)
+        self.send_cmd(p)
+
+    def set_temp(self, temp):
+        assert self.state != State.START
+        self.set_cmd(HEAD_TMP, self.mode, self.fan_lv, temp)
+
+    def set_fan(self, cmd):
+        assert self.state != State.START
+        fan_lv = self.cmd_to_bits('fan', cmd)
+        self.set_cmd(HEAD_FAN, self.mode, fan_lv, self.temp1)
 
     def sensor_query(self, id):
         assert id < 0xff
@@ -413,12 +398,7 @@ class Aircon():
         self.send_sv(p)
 
     def reset_filter(self):
-        p = [self.addr, 0xfe, 0x10]
+        header = [self.addr, 0xfe, 0x10]
         payload = [0x00, 0x4b]
-        p.append(len(payload))
-        p += payload
-        ck = 0x0
-        for c in p:
-            ck ^= c
-        p.append(ck)
+        p = self.gen_pkt(header, payload)
         self.send_flt(p)
