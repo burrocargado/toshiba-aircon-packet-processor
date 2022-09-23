@@ -62,27 +62,6 @@ def subscribe(client: mqtt_client):
                 for c in ac.state1:
                     line += f' {c:02X}'
                 disp.add_stat(1, line)
-                y = 7
-                disp.add_stat(y, f"Power:   {ac.bits_to_text('power', ac.power).title():3s}")
-                y +=1
-                disp.add_stat(y, f"Mode:    {ac.bits_to_text('mode', ac.mode).title():9s}")
-                #y +=1
-                #disp.add_stat(y, f'Clean:   {ac.clean:1b}')
-                y +=1
-                disp.add_stat(y, f"FanLv:   {ac.bits_to_text('fan', ac.fan_lv).title():4s}")
-                y +=1
-                disp.add_stat(y, f'SetTemp: {ac.temp1:2d}')
-                y +=1
-                disp.add_stat(y, f'Temp:    {ac.temp2:2d}')
-                y +=1
-                disp.add_stat(y, f"Save:    {ac.bits_to_text('save', ac.save).title():3s}")
-
-            txt = 'Filter' if ac.filter else ''
-            disp.win_state.addstr(2, 52, f'{txt:6s}')
-            txt = 'Ventilation' if ac.vent else ''
-            disp.win_state.addstr(1, 47, f'{txt:11s}')
-            txt = 'Cleaning' if ac.clean else ''
-            disp.win_state.addstr(1, 37, f'{txt:8s}')
 
             if ac.params:
                 line = 'params: '
@@ -187,6 +166,28 @@ def run():
         result = client.publish('aircon/update', json.dumps(data))
 
     def update_status():
+        y = 7
+        disp.add_stat(y, f"Power:   {ac.bits_to_text('power', ac.power).title():3s}")
+        y +=1
+        disp.add_stat(y, f"Mode:    {ac.bits_to_text('mode', ac.mode).title():9s}")
+        #y +=1
+        #disp.add_stat(y, f'Clean:   {ac.clean:1b}')
+        y +=1
+        disp.add_stat(y, f"FanLv:   {ac.bits_to_text('fan', ac.fan_lv).title():4s}")
+        y +=1
+        disp.add_stat(y, f'SetTemp: {ac.temp1:2d}')
+        y +=1
+        disp.add_stat(y, f'Temp:    {ac.temp2:2d}')
+        y +=1
+        disp.add_stat(y, f"Save:    {ac.bits_to_text('save', ac.save).title():3s}")
+
+        txt = 'Filter' if ac.filter else ''
+        disp.win_state.addstr(2, 52, f'{txt:6s}')
+        txt = 'Ventilation' if ac.vent else ''
+        disp.win_state.addstr(1, 47, f'{txt:11s}')
+        txt = 'Cleaning' if ac.clean else ''
+        disp.win_state.addstr(1, 37, f'{txt:8s}')
+
         data = {
             'power': ac.bits_to_text('power', ac.power),
             'mode': ac.bits_to_text('mode', ac.mode),
