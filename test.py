@@ -187,6 +187,8 @@ def run():
         disp.win_state.addstr(1, 47, f'{txt:11s}')
         txt = 'Cleaning' if ac.clean else ''
         disp.win_state.addstr(1, 37, f'{txt:8s}')
+        txt = 'Humidifier' if ac.humid else ''
+        disp.win_state.addstr(2, 37, f'{txt:10s}')
 
         data = {
             'power': ac.bits_to_text('power', ac.power),

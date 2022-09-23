@@ -97,6 +97,7 @@ class Aircon():
         self.save = None
         self.filter = None
         self.vent = None
+        self.humid = None
         self.pwr_lv1 = 0
         self.pwr_lv2 = 0
         self.filter_time = 0
@@ -255,6 +256,7 @@ class Aircon():
             self.fan_lv = (payload[1] >> 5) & 0b111
             self.filter = (payload[2] >> 7) & 0b1
             self.vent = (payload[2] >> 2) & 0b1 # this might be incorrect
+            self.humid = (payload[2] >> 1) & 0b1
             self.temp1 = (payload[4] >> 1) - 35
             if self.status_cb:
                 self.status_cb()
