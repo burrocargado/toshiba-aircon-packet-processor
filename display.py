@@ -42,13 +42,16 @@ class Display():
     def add_stat(self, r, txt):
         self.win_state.addstr(r, 2, txt)
     
-    def on_message(self, packet, ac):
+    def disp_packet(self, packet):
         line = ''
         for c in packet[:-1]:
             line += f'{c:02X} '
         c = packet[-1]
         line += f'{c:02X}'
         self.print_raw(line)
+
+    def on_message(self, packet, ac):
+        self.disp_packet(packet)
 
         if ac.state1:
             line = 'State1: '

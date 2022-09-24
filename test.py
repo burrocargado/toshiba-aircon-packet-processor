@@ -83,6 +83,7 @@ def run():
         # result: [0, 1]
         status = result[0]
         if disp:
+            disp.disp_packet(p)
             disp.send_status(p, status)
 
     def update_sensors():
