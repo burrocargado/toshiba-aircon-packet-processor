@@ -110,6 +110,7 @@ def run():
             'filter_time': ac.filter_time,
             'filter': 'ON' if ac.filter == 1 else 'OFF',
             'vent': 'ON' if ac.vent == 1 else 'OFF',
+            'humid': 'ON' if ac.humid == 1 else 'OFF',
         }
         db.write_status(update)
         data = {

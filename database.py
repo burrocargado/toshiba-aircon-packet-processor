@@ -57,6 +57,7 @@ class Status(Base):
     filter_time = Column(Integer)
     filter = Column(String(3))
     vent = Column(String(3))
+    humid = Column(String(3))
 
 
 class DB():
