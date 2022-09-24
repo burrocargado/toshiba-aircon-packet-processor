@@ -51,7 +51,7 @@ def subscribe(client: mqtt_client):
             ac.parse(packet)
             db.write_packet('RX', packet)
             if disp:
-                disp.on_message(packet, ac)
+                disp.on_rx_packet(packet, ac)
         elif msg.topic == 'aircon/packet/tx':
             packet = msg.payload
             db.write_packet('TX', packet)

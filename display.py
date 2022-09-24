@@ -50,7 +50,7 @@ class Display():
         line += f'{c:02X}'
         self.print_raw(line)
 
-    def on_message(self, packet, ac):
+    def on_rx_packet(self, packet, ac):
         self.disp_packet(packet)
 
         if ac.state1:
