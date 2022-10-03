@@ -2,6 +2,9 @@ from enum import IntEnum
 from collections import namedtuple
 import time
 import struct
+from transitions import Machine
+from transitions.extensions import GraphMachine
+from transitions.extensions.states import add_state_features, Timeout
 
 HEAD_TMP = 0b01
 HEAD_FAN = 0b10
@@ -33,6 +36,58 @@ class State(IntEnum):
         elif self.value == 6:
             text = 'resetting filter'
         return text
+
+@add_state_features(Timeout)
+class CustomMachine(GraphMachine):
+    pass
+
+states = [
+    State.START,
+    State.IDLE,
+    {'name': State.CMD, 'timeout': RETRY_WAIT, 'on_timeout': 'ack_timeout'},
+    {'name': State.QUERY1, 'timeout': RETRY_WAIT, 'on_timeout': 'ack_timeout'},
+    {'name': State.QUERY2, 'timeout': RETRY_WAIT, 'on_timeout': 'ack_timeout'},
+    {'name': State.SSAVE, 'timeout': RETRY_WAIT, 'on_timeout': 'ack_timeout'},
+    {'name': State.FILTER, 'timeout': RETRY_WAIT, 'on_timeout': 'ack_timeout'},
+]
+
+class StateMachine(object):
+
+    def __init__(self, ac):
+        self.ac = ac
+        self.packet = None
+
+        self.machine = CustomMachine(model=self, states=states, initial=State.START, auto_transitions=False, send_event=True)
+        self.machine.add_transition(
+            trigger='idle',
+            source=[State.START, State.CMD, State.QUERY1, State.QUERY2, State.SSAVE, State.FILTER],
+            dest=State.IDLE,
+            before='before_idle',
+        )
+        self.machine.add_transition(trigger='cmd', source=State.IDLE, dest=State.CMD, after='send_packet')
+        self.machine.add_transition(trigger='query1', source=State.IDLE, dest=State.QUERY1, after='send_packet')
+        self.machine.add_transition(trigger='query2', source=State.IDLE, dest=State.QUERY2, after='send_packet')
+        self.machine.add_transition(trigger='ssave', source=State.IDLE, dest=State.SSAVE, after='send_packet')
+        self.machine.add_transition(trigger='filter', source=State.IDLE, dest=State.FILTER, after='send_packet')
+        self.machine.add_transition(
+            trigger='self',
+            source=[State.CMD, State.QUERY1, State.QUERY2, State.SSAVE, State.FILTER],
+            dest='=',
+        )
+
+    def ack_timeout(self, event):
+        #print(f'timeout: {self.state}')
+        if self.ac.transmit:
+            self.ac.transmit(self.packet)
+            self.self()
+    
+    def send_packet(self, event):
+        self.packet = event.kwargs.get('packet')
+        if self.ac.transmit:
+            self.ac.transmit(self.packet)
+    
+    def before_idle(self, event):
+        self.packet = None
 
 CmdSetItem = namedtuple('CmdSetItem', 'bits cmd text')
 CommandSets = namedtuple('CommandSets', 'power mode fan save')
@@ -81,7 +136,7 @@ class Aircon():
         self.q2_queue = [] # extra query packet queue
         self.sv_queue = [] # seve mode setting packet queue
         self.flt_queue = [] # filter resetting packet queue
-        self.state = State.START
+        self.machine = StateMachine(self)
         self.addr = addr
 
         self.state1 = None
@@ -105,20 +160,16 @@ class Aircon():
         self.extra = {}
         self.q_time = 0.0
 
-        self.c_time = None
-        self.q1_time = None
-        self.q2_time = None
-        self.sv_time = None
-        self.flt_time = None
+    @property
+    def state(self):
+        return self.machine.state
 
     def send_cmd(self, p):
         if self.transmit is None:
             return
         self.c_queue.append(p)
         if self.state == State.IDLE:
-            self.state = State.CMD
-            self.transmit(self.c_queue[0])
-            self.c_time = time.time()
+            self.machine.cmd(packet=self.c_queue.pop(0))
 
     def send_query1(self, p):
         if self.transmit is None:
@@ -126,59 +177,41 @@ class Aircon():
             return
         self.q1_queue.append(p)
         if self.state == State.IDLE:
-            self.state = State.QUERY1
-            self.transmit(self.q1_queue[0])
-            self.q1_time = time.time()
+            self.machine.query1(packet=self.q1_queue.pop(0))
 
     def send_query2(self, p):
         if self.transmit is None:
             return
         self.q2_queue.append(p)
         if self.state == State.IDLE:
-            self.state = State.QUERY2
-            self.transmit(self.q2_queue[0])
-            self.q2_time = time.time()
+            self.machine.query2(packet=self.q2_queue.pop(0))
 
     def send_sv(self, p):
         if self.transmit is None:
             return
         self.sv_queue.append(p)
         if self.state == State.IDLE:
-            self.state = State.SSAVE
-            self.transmit(self.sv_queue[0])
-            self.sv_time = time.time()
+            self.machine.ssave(packet=self.sv_queue.pop(0))
 
     def send_flt(self, p):
         if self.transmit is None:
             return
         self.flt_queue.append(p)
         if self.state == State.IDLE:
-            self.state = State.FILTER
-            self.transmit(self.flt_queue[0])
-            self.flt_time = time.time()
+            self.machine.filter(packet=self.flt_queue.pop(0))
 
     def loop(self):
         if self.state == State.IDLE:
             if self.c_queue:
-                self.state = State.CMD
-                self.transmit(self.c_queue[0])
-                self.c_time = time.time()
+                self.machine.cmd(packet=self.c_queue.pop(0))
             elif self.sv_queue:
-                self.state = State.SSAVE
-                self.transmit(self.sv_queue[0])
-                self.sv_time = time.time()
+                self.machine.ssave(packet=self.sv_queue.pop(0))
             elif self.flt_queue:
-                self.state = State.FILTER
-                self.transmit(self.flt_queue[0])
-                self.flt_time = time.time()
+                self.machine.filter(packet=self.flt_queue.pop(0))
             elif self.q1_queue:
-                self.state = State.QUERY1
-                self.transmit(self.q1_queue[0])
-                self.q1_time = time.time()
+                self.machine.query1(packet=self.q1_queue.pop(0))
             elif self.q2_queue:
-                self.state = State.QUERY2
-                self.transmit(self.q2_queue[0])
-                self.q2_time = time.time()
+                self.machine.query2(packet=self.q2_queue.pop(0))
             elif self.update_cb is not None and self.update:
                 self.update_cb()
                 self.update = False
@@ -196,37 +229,12 @@ class Aircon():
                 self.sensor_query(0x6a)
                 self.q_time = time.time()
                 self.update = True
-        elif self.state == State.CMD:
-            if time.time() - self.c_time > RETRY_WAIT:
-                # no ack, retry
-                self.transmit(self.c_queue[0])
-                self.c_time = time.time()
         elif self.state == State.SSAVE:
-            if (self.sv_queue[0][7] >> 4) & 0b11 == self.save:
-                self.sv_queue.pop(0)
-                self.state = State.IDLE
-            elif time.time() - self.sv_time > RETRY_WAIT:
-                # save mode not set, retry
-                self.transmit(self.sv_queue[0])
-                self.sv_time = time.time()
+            if (self.machine.packet[0][7] >> 4) & 0b11 == self.save:
+                self.machine.idle()
         elif self.state == State.FILTER:
             if self.filter == 0:
-                self.flt_queue.pop(0)
-                self.state = State.IDLE
-            elif time.time() - self.flt_time > RETRY_WAIT:
-                # filter not reset, retry
-                self.transmit(self.flt_queue[0])
-                self.flt_time = time.time()
-        elif self.state == State.QUERY1:
-            if time.time() - self.q1_time > RETRY_WAIT:
-                # no reply, retry
-                self.transmit(self.q1_queue[0])
-                self.q1_time = time.time()
-        elif self.state == State.QUERY2:
-            if time.time() - self.q2_time > RETRY_WAIT:
-                # no reply, retry
-                self.transmit(self.q2_queue[0])
-                self.q2_time = time.time()
+                self.machine.idle()
 
     def parse(self, p):
         if p[0] == 0x00:
@@ -244,7 +252,7 @@ class Aircon():
             self.temp2 = (payload[5] >> 1) - 35
             self.save1 = payload[7] & 0b1
             if self.state == State.START:
-                self.state = State.IDLE
+                self.machine.idle()
         elif p[2] == 0x1c:
             payload = p[6:12]
             self.state2 = payload
@@ -268,26 +276,25 @@ class Aircon():
     def parse_reply(self, p):
         if p[2] == 0x18 and p[4] == 0x80 and p[5] == 0xa1:
             if self.state == State.CMD:
-                self.c_queue.pop(0)
-                self.state = State.IDLE
+                self.machine.idle()
         if p[2] == 0x1a and p[4] == 0x80 and p[5] == 0xef:
             if self.state == State.QUERY1:
-                p0 = self.q1_queue.pop(0)
+                p0 = self.machine.packet
                 if p[8] == 0x2c:
                     self.sensor[p0[11]] = struct.unpack('>h', bytes(p[9:11]))[0]
                 else:
                     self.sensor[p0[11]] = None
-                self.state = State.IDLE
+                self.machine.idle()
         if p[2] == 0x18 and p[4] == 0x80 and p[5] == 0xe8:
             if self.state == State.QUERY2:
-                p0 = self.q2_queue.pop(0)
+                p0 = self.machine.packet
                 self.extra[p0[9]] = p[6:11]
                 if p0[9] == 0x94:
                     self.pwr_lv1 = p[9]
                     self.pwr_lv2 = p[10]
                 elif p0[9] == 0x9e:
                     self.filter_time = (p[9] << 8) + p[10]
-                self.state = State.IDLE
+                self.machine.idle()
 
     def bits_to_text(self, cmdtype, bits):
         text = f'{bits:b}'
