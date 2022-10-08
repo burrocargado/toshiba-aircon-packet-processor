@@ -307,7 +307,7 @@ class Aircon():
             self.clean = (payload[1] >> 2) & 0b1
             self.fan_lv = (payload[1] >> 5) & 0b111
             self.filter = (payload[2] >> 7) & 0b1
-            self.vent = (payload[2] >> 2) & 0b1 # this might be incorrect
+            self.vent = (payload[2] >> 2) & 0b1
             self.humid = (payload[2] >> 1) & 0b1
             self.temp1 = (payload[4] >> 1) - 35
             if self.status_cb:

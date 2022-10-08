@@ -4,7 +4,6 @@ Tested with NTS-F1403Y1 released 2004.
 """
 import random
 import ssl
-#import time
 import json
 
 from paho.mqtt import client as mqtt_client
@@ -130,8 +129,6 @@ def run():
             'sens_ths': ac.sensor[0x65],
             'sens_current': ac.sensor[0x6a],
         }
-        #update = {'update': data}
-        #result = client.publish('aircon/update', json.dumps(update))
         result = client.publish('aircon/update', json.dumps(data))
 
     def update_status():
@@ -150,8 +147,6 @@ def run():
             'save': ac.bits_to_text('save', ac.save),
             'humid': ac.bits_to_text('humid', ac.humid),
         }
-        #update = {'status': data}
-        #result = client.publish('aircon/status', json.dumps(update))
         result = client.publish('aircon/status', json.dumps(data))
 
     ac.transmit = transmit
