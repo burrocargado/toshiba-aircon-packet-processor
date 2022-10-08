@@ -96,6 +96,8 @@ class StateMachine(object):
         self.packet = event.kwargs.get('packet')
         if self.ac.transmit:
             self.ac.transmit(self.packet)
+        else:
+            self.idle()
 
     def set_humid(self, event):
         hmd = event.kwargs.get('value')
