@@ -19,6 +19,8 @@ class State(IntEnum):
     QUERY2 = 4
     SSAVE = 5
     FILTER = 6
+    HUMID = 7
+    HMDTGL = 8
 
     def __str__(self):
         if self.value == 0:
@@ -35,6 +37,10 @@ class State(IntEnum):
             text = 'setting save mode'
         elif self.value == 6:
             text = 'resetting filter'
+        elif self.value == 7:
+            text = 'setting humidifier'
+        elif self.value == 8:
+            text = 'toggling humidifier'
         return text
 
 @add_state_features(Timeout)
@@ -49,6 +55,8 @@ states = [
     {'name': State.QUERY2, 'timeout': RETRY_WAIT, 'on_timeout': 'ack_timeout'},
     {'name': State.SSAVE, 'timeout': RETRY_WAIT, 'on_timeout': 'ack_timeout'},
     {'name': State.FILTER, 'timeout': RETRY_WAIT, 'on_timeout': 'ack_timeout'},
+    {'name': State.HUMID, 'timeout': RETRY_WAIT, 'on_timeout': 'hmd_timeout'},
+    {'name': State.HMDTGL, 'timeout': RETRY_WAIT, 'on_timeout': 'ack_timeout'},
 ]
 
 class StateMachine(object):
@@ -56,11 +64,12 @@ class StateMachine(object):
     def __init__(self, ac):
         self.ac = ac
         self.packet = None
+        self.hmd = None
 
         self.machine = CustomMachine(model=self, states=states, initial=State.START, auto_transitions=False, send_event=True)
         self.machine.add_transition(
             trigger='idle',
-            source=[State.START, State.CMD, State.QUERY1, State.QUERY2, State.SSAVE, State.FILTER],
+            source=[State.START, State.CMD, State.QUERY1, State.QUERY2, State.SSAVE, State.FILTER, State.HUMID],
             dest=State.IDLE,
             before='before_idle',
         )
@@ -69,9 +78,11 @@ class StateMachine(object):
         self.machine.add_transition(trigger='query2', source=State.IDLE, dest=State.QUERY2, after='send_packet')
         self.machine.add_transition(trigger='ssave', source=State.IDLE, dest=State.SSAVE, after='send_packet')
         self.machine.add_transition(trigger='filter', source=State.IDLE, dest=State.FILTER, after='send_packet')
+        self.machine.add_transition(trigger='humid', source=[State.IDLE, State.HMDTGL], dest=State.HUMID, after='set_humid')
+        self.machine.add_transition(trigger='hmdtgl', source=State.HUMID, dest=State.HMDTGL, after='send_packet')
         self.machine.add_transition(
             trigger='self',
-            source=[State.CMD, State.QUERY1, State.QUERY2, State.SSAVE, State.FILTER],
+            source=[State.CMD, State.QUERY1, State.QUERY2, State.SSAVE, State.FILTER, State.HMDTGL],
             dest='=',
         )
 
@@ -85,12 +96,26 @@ class StateMachine(object):
         self.packet = event.kwargs.get('packet')
         if self.ac.transmit:
             self.ac.transmit(self.packet)
+
+    def set_humid(self, event):
+        hmd = event.kwargs.get('value')
+        if hmd is not None:
+            if self.ac.humid == hmd:
+                self.idle()
+            else:
+                self.hmd = hmd
+                self.ac.toggle_humid()
+
+    def hmd_timeout(self, event):
+        self.ac.toggle_humid()
     
     def before_idle(self, event):
         self.packet = None
+        if self.state == State.HUMID:
+            self.hmd = None
 
 CmdSetItem = namedtuple('CmdSetItem', 'bits cmd text')
-CommandSets = namedtuple('CommandSets', 'power mode fan save')
+CommandSets = namedtuple('CommandSets', 'power mode fan save humid')
 CMDSETS = CommandSets(
     # power
     (
@@ -117,6 +142,11 @@ CMDSETS = CommandSets(
     (
         CmdSetItem(0b11, 'R', 'off'),
         CmdSetItem(0b00, 'S', 'on')
+    ),
+    # humidifier
+    (
+        CmdSetItem(0b1, '1', 'on'),
+        CmdSetItem(0b0, '0', 'off')
     )
 )
 
@@ -136,6 +166,7 @@ class Aircon():
         self.q2_queue = [] # extra query packet queue
         self.sv_queue = [] # seve mode setting packet queue
         self.flt_queue = [] # filter resetting packet queue
+        self.hmd_queue = [] # humidifier setting value queue
         self.machine = StateMachine(self)
         self.addr = addr
 
@@ -170,6 +201,12 @@ class Aircon():
         self.c_queue.append(p)
         if self.state == State.IDLE:
             self.machine.cmd(packet=self.c_queue.pop(0))
+
+    def send_hmd(self, p):
+        if self.transmit is None:
+            return
+        assert self.state == State.HUMID
+        self.machine.hmdtgl(packet=p)
 
     def send_query1(self, p):
         if self.transmit is None:
@@ -206,6 +243,8 @@ class Aircon():
                 self.machine.cmd(packet=self.c_queue.pop(0))
             elif self.sv_queue:
                 self.machine.ssave(packet=self.sv_queue.pop(0))
+            elif self.hmd_queue:
+                self.machine.humid(value=self.hmd_queue.pop(0))
             elif self.flt_queue:
                 self.machine.filter(packet=self.flt_queue.pop(0))
             elif self.q1_queue:
@@ -234,6 +273,9 @@ class Aircon():
                 self.machine.idle()
         elif self.state == State.FILTER:
             if self.filter == 0:
+                self.machine.idle()
+        elif self.state == State.HUMID:
+            if self.humid == self.machine.hmd:
                 self.machine.idle()
 
     def parse(self, p):
@@ -277,6 +319,8 @@ class Aircon():
         if p[2] == 0x18 and p[4] == 0x80 and p[5] == 0xa1:
             if self.state == State.CMD:
                 self.machine.idle()
+            elif self.state == State.HMDTGL:
+                self.machine.humid()
         if p[2] == 0x1a and p[4] == 0x80 and p[5] == 0xef:
             if self.state == State.QUERY1:
                 p0 = self.machine.packet
@@ -412,3 +456,17 @@ class Aircon():
         payload = [0x00, 0x4b]
         p = self.gen_pkt(header, payload)
         self.send_flt(p)
+
+    def toggle_humid(self):
+        header = [self.addr, 0x00, 0x11]
+        payload = [0x08, 0x52, 0x01]
+        p = self.gen_pkt(header, payload)
+        self.send_hmd(p)
+
+    def set_humid(self, cmd):
+        if self.mode not in [0b001, 0b101]:
+            return
+        value = self.cmd_to_bits('humid', cmd)
+        self.hmd_queue.append(value)
+        if self.state == State.IDLE:
+            self.machine.humid(value=self.hmd_queue.pop(0))

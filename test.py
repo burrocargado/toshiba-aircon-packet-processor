@@ -70,6 +70,8 @@ def subscribe(client: mqtt_client):
                 ac.set_mode(ctrl['set_mode'])
             if 'set_save' in ctrl:
                 ac.set_save(ctrl['set_save'])
+            if 'set_humid' in ctrl:
+                ac.set_humid(ctrl['set_humid'])
 
     client.subscribe(TOPIC)
     client.on_message = on_message
@@ -111,7 +113,7 @@ def run():
             'filter_time': ac.filter_time,
             'filter': 'ON' if ac.filter == 1 else 'OFF',
             'vent': 'ON' if ac.vent == 1 else 'OFF',
-            'humid': 'ON' if ac.humid == 1 else 'OFF',
+            'humid': ac.bits_to_text('humid', ac.humid),
         }
         db.write_status(update)
         data = {
@@ -146,6 +148,7 @@ def run():
             'filter': 'on' if ac.filter == 1 else 'off',
             'vent': 'on' if ac.vent == 1 else 'off',
             'save': ac.bits_to_text('save', ac.save),
+            'humid': ac.bits_to_text('humid', ac.humid),
         }
         #update = {'status': data}
         #result = client.publish('aircon/status', json.dumps(update))

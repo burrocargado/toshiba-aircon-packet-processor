@@ -101,6 +101,10 @@ class Display():
             ac.set_save('S')
         elif c == ord('4'):
             ac.set_save('R')
+        elif c == ord('5'):
+            ac.set_humid('1')
+        elif c == ord('6'):
+            ac.set_humid('0')
         #elif c == ord('0'):
         #    ac.reset_filter()
         elif c == ord('e'):
