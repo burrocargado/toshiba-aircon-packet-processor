@@ -1,5 +1,5 @@
 from enum import IntEnum
-from collections import namedtuple
+from collections import namedtuple, deque
 import time
 import struct
 from transitions import Machine
@@ -66,6 +66,7 @@ class StateMachine(object):
         self.packet = None
         self.hmd = None
 
+        self.state_history = deque(maxlen=2)
         self.machine = CustomMachine(model=self, states=states, initial=State.START, auto_transitions=False, send_event=True)
         self.machine.add_transition(
             trigger='idle',
@@ -85,6 +86,14 @@ class StateMachine(object):
             source=[State.CMD, State.QUERY1, State.QUERY2, State.SSAVE, State.FILTER, State.HMDTGL],
             dest='=',
         )
+
+    @property
+    def state(self):
+        return self.state_history[-1]
+
+    @state.setter
+    def state(self, value):
+        self.state_history.append(value)
 
     def ack_timeout(self, event):
         #print(f'timeout: {self.state}')
