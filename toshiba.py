@@ -63,6 +63,7 @@ class StateMachine(object):
 
     def __init__(self, ac):
         self.ac = ac
+        self.callback = None
         self.packet = None
         self.hmd = None
 
@@ -96,17 +97,13 @@ class StateMachine(object):
         self.state_history.append(value)
 
     def ack_timeout(self, event):
-        #print(f'timeout: {self.state}')
-        if self.ac.transmit:
-            self.ac.transmit(self.packet)
-            self.self()
-    
+        func, args = self.callback
+        func(*args)
+
     def send_packet(self, event):
-        self.packet = event.kwargs.get('packet')
-        if self.ac.transmit:
-            self.ac.transmit(self.packet)
-        else:
-            self.idle()
+        self.callback = event.kwargs.get('callback')
+        func, args = self.callback
+        func(*args)
 
     def set_humid(self, event):
         hmd = event.kwargs.get('value')
@@ -172,12 +169,8 @@ class Aircon():
         self.update_cb = None
         self.status_cb = None
         self.update = False
-        self.c_queue = [] # command packet queue
-        self.q1_queue = [] # sensor query packet queue
-        self.q2_queue = [] # extra query packet queue
-        self.sv_queue = [] # seve mode setting packet queue
-        self.flt_queue = [] # filter resetting packet queue
-        self.hmd_queue = [] # humidifier setting value queue
+        self.queue = []
+        self.tx_packet = None
         self.machine = StateMachine(self)
         self.addr = addr
 
@@ -206,62 +199,11 @@ class Aircon():
     def state(self):
         return self.machine.state
 
-    def send_cmd(self, p):
-        if self.transmit is None:
-            return
-        self.c_queue.append(p)
-        if self.state == State.IDLE:
-            self.machine.cmd(packet=self.c_queue.pop(0))
-
-    def send_hmd(self, p):
-        if self.transmit is None:
-            return
-        assert self.state == State.HUMID
-        self.machine.hmdtgl(packet=p)
-
-    def send_query1(self, p):
-        if self.transmit is None:
-            self.sensor[p[11]] = 0
-            return
-        self.q1_queue.append(p)
-        if self.state == State.IDLE:
-            self.machine.query1(packet=self.q1_queue.pop(0))
-
-    def send_query2(self, p):
-        if self.transmit is None:
-            return
-        self.q2_queue.append(p)
-        if self.state == State.IDLE:
-            self.machine.query2(packet=self.q2_queue.pop(0))
-
-    def send_sv(self, p):
-        if self.transmit is None:
-            return
-        self.sv_queue.append(p)
-        if self.state == State.IDLE:
-            self.machine.ssave(packet=self.sv_queue.pop(0))
-
-    def send_flt(self, p):
-        if self.transmit is None:
-            return
-        self.flt_queue.append(p)
-        if self.state == State.IDLE:
-            self.machine.filter(packet=self.flt_queue.pop(0))
-
     def loop(self):
         if self.state == State.IDLE:
-            if self.c_queue:
-                self.machine.cmd(packet=self.c_queue.pop(0))
-            elif self.sv_queue:
-                self.machine.ssave(packet=self.sv_queue.pop(0))
-            elif self.hmd_queue:
-                self.machine.humid(value=self.hmd_queue.pop(0))
-            elif self.flt_queue:
-                self.machine.filter(packet=self.flt_queue.pop(0))
-            elif self.q1_queue:
-                self.machine.query1(packet=self.q1_queue.pop(0))
-            elif self.q2_queue:
-                self.machine.query2(packet=self.q2_queue.pop(0))
+            if self.queue:
+                f, cb = self.queue.pop(0)
+                f(callback=cb)
             elif self.update_cb is not None and self.update:
                 self.update_cb()
                 self.update = False
@@ -280,7 +222,8 @@ class Aircon():
                 self.q_time = time.time()
                 self.update = True
         elif self.state == State.SSAVE:
-            if (self.machine.packet[7] >> 4) & 0b11 == self.save:
+            p0 = self.tx_packet
+            if (p0[7] >> 4) & 0b11 == self.save:
                 self.machine.idle()
         elif self.state == State.FILTER:
             if self.filter == 0:
@@ -334,7 +277,7 @@ class Aircon():
                 self.machine.humid()
         if p[2] == 0x1a and p[4] == 0x80 and p[5] == 0xef:
             if self.state == State.QUERY1:
-                p0 = self.machine.packet
+                p0 = self.tx_packet
                 if p[8] == 0x2c:
                     self.sensor[p0[11]] = struct.unpack('>h', bytes(p[9:11]))[0]
                 else:
@@ -342,7 +285,7 @@ class Aircon():
                 self.machine.idle()
         if p[2] == 0x18 and p[4] == 0x80 and p[5] == 0xe8:
             if self.state == State.QUERY2:
-                p0 = self.machine.packet
+                p0 = self.tx_packet
                 self.extra[p0[9]] = p[6:11]
                 if p0[9] == 0x94:
                     self.pwr_lv1 = p[9]
@@ -382,20 +325,34 @@ class Aircon():
         return p
 
     def set_power(self, cmd):
+        self.queue.append((self.machine.cmd, (self.set_power_, (cmd,))))
+        if self.state == State.IDLE:
+            f, cb = self.queue.pop(0)
+            f(callback=cb)
+
+    def set_power_(self, cmd):
         header = [self.addr, 0x00, 0x11]
         payload = [0x08, 0x41]
         byte = 0x02 | self.cmd_to_bits('power', cmd)
         payload.append(byte)
         p = self.gen_pkt(header, payload)
-        self.send_cmd(p)
+        self.tx_packet = p
+        self.transmit(p)
 
     def set_mode(self, cmd):
+        self.queue.append((self.machine.cmd, (self.set_mode_, (cmd,))))
+        if self.state == State.IDLE:
+            f, cb = self.queue.pop(0)
+            f(callback=cb)
+
+    def set_mode_(self, cmd):
         header = [self.addr, 0x00, 0x11]
         payload = [0x08, 0x42]
         byte = self.cmd_to_bits('mode', cmd)
         payload.append(byte)
         p = self.gen_pkt(header, payload)
-        self.send_cmd(p)
+        self.tx_packet = p
+        self.transmit(p)
 
     def set_cmd(self, head, mode, fan_lv, temp):
         assert mode is not None
@@ -413,34 +370,61 @@ class Aircon():
         temp = (temp + 35) << 1
         payload.append(temp)
         p = self.gen_pkt(header, payload)
-        self.send_cmd(p)
+        self.tx_packet = p
+        self.transmit(p)
 
     def set_temp(self, temp):
+        self.queue.append((self.machine.cmd, (self.set_temp_, (temp,))))
+        if self.state == State.IDLE:
+            f, cb = self.queue.pop(0)
+            f(callback=cb)
+
+    def set_temp_(self, temp):
         assert self.state != State.START
         self.set_cmd(HEAD_TMP, self.mode, self.fan_lv, temp)
 
     def set_fan(self, cmd):
+        self.queue.append((self.machine.cmd, (self.set_fan_, (cmd,))))
+        if self.state == State.IDLE:
+            f, cb = self.queue.pop(0)
+            f(callback=cb)
+
+    def set_fan_(self, cmd):
         assert self.state != State.START
         fan_lv = self.cmd_to_bits('fan', cmd)
         self.set_cmd(HEAD_FAN, self.mode, fan_lv, self.temp1)
 
     def sensor_query(self, id):
+        self.queue.append((self.machine.query1, (self.sensor_query_, (id,))))
+        if self.state == State.IDLE:
+            f, cb = self.queue.pop(0)
+            f(callback=cb)
+
+    def sensor_query_(self, id):
         assert id < 0xff
         header = [self.addr, 0x00, 0x17]
         payload = [0x08, 0x80]
         payload += [0xef, 0x00, 0x2c, 0x08, 0x00]
         payload.append(id)
         p = self.gen_pkt(header, payload)
-        self.send_query1(p)
+        self.tx_packet = p
+        self.transmit(p)
 
     def extra_query(self, id):
+        self.queue.append((self.machine.query2, (self.extra_query_, (id,))))
+        if self.state == State.IDLE:
+            f, cb = self.queue.pop(0)
+            f(callback=cb)
+
+    def extra_query_(self, id):
         assert id in [0x94, 0x9e]
         header = [self.addr, 0x00, 0x15]
         payload = [0x08, 0xe8]
         payload += [0x00, 0x01, 0x00]
         payload.append(id)
         p = self.gen_pkt(header, payload)
-        self.send_query2(p)
+        self.tx_packet = p
+        self.transmit(p)
 
     def power_query(self):
         self.extra_query(0x94)
@@ -449,6 +433,12 @@ class Aircon():
         self.extra_query(0x9e)
 
     def set_save(self, cmd):
+        self.queue.append((self.machine.ssave, (self.set_save_, (cmd,))))
+        if self.state == State.IDLE:
+            f, cb = self.queue.pop(0)
+            f(callback=cb)
+
+    def set_save_(self, cmd):
         assert self.state != State.START
         bits = self.cmd_to_bits('save', cmd)
         header = [self.addr, 0xfe, 0x10]
@@ -460,24 +450,42 @@ class Aircon():
         a = (self.temp1 + 35) << 1
         payload.append(a)
         p = self.gen_pkt(header, payload)
-        self.send_sv(p)
+        self.tx_packet = p
+        self.transmit(p)
 
     def reset_filter(self):
+        self.queue.append((self.machine.filter, (self.reset_filter_, ())))
+        if self.state == State.IDLE:
+            f, cb = self.queue.pop(0)
+            f(callback=cb)
+
+    def reset_filter_(self, _):
         header = [self.addr, 0xfe, 0x10]
         payload = [0x00, 0x4b]
         p = self.gen_pkt(header, payload)
-        self.send_flt(p)
+        self.tx_packet = p
+        self.transmit(p)
 
     def toggle_humid(self):
+        cb = (self.toggle_humid_, ())
+        self.machine.hmdtgl(callback=cb)
+
+    def toggle_humid_(self):
         header = [self.addr, 0x00, 0x11]
         payload = [0x08, 0x52, 0x01]
         p = self.gen_pkt(header, payload)
-        self.send_hmd(p)
+        self.tx_packet = p
+        self.transmit(p)
 
     def set_humid(self, cmd):
+        self.queue.append((self.set_humid_, (cmd,)))
+        if self.state == State.IDLE:
+            f, cb = self.queue.pop(0)
+            f(callback=cb)
+
+    def set_humid_(self, callback):
+        cmd, = callback
         if self.mode not in [0b001, 0b101]:
             return
         value = self.cmd_to_bits('humid', cmd)
-        self.hmd_queue.append(value)
-        if self.state == State.IDLE:
-            self.machine.humid(value=self.hmd_queue.pop(0))
+        self.machine.humid(value=value)
