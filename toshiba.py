@@ -271,7 +271,7 @@ class Aircon():
                 self.q_time = time.time()
                 self.update = True
         elif self.state == State.SSAVE:
-            if (self.machine.packet[0][7] >> 4) & 0b11 == self.save:
+            if (self.machine.packet[7] >> 4) & 0b11 == self.save:
                 self.machine.idle()
         elif self.state == State.FILTER:
             if self.filter == 0:
