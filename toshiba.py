@@ -6,8 +6,6 @@ from transitions import Machine
 from transitions.extensions import GraphMachine
 from transitions.extensions.states import add_state_features, Timeout
 
-HEAD_TMP = 0b01
-HEAD_FAN = 0b10
 RETRY_WAIT = 1.0 # timeout in seconds for command or query reply
 QUERY_INTERVAL = 60.0
 
@@ -50,13 +48,13 @@ class CustomMachine(GraphMachine):
 states = [
     State.START,
     State.IDLE,
-    {'name': State.CMD, 'timeout': RETRY_WAIT, 'on_timeout': 'ack_timeout'},
-    {'name': State.QUERY1, 'timeout': RETRY_WAIT, 'on_timeout': 'ack_timeout'},
-    {'name': State.QUERY2, 'timeout': RETRY_WAIT, 'on_timeout': 'ack_timeout'},
-    {'name': State.SSAVE, 'timeout': RETRY_WAIT, 'on_timeout': 'ack_timeout'},
-    {'name': State.FILTER, 'timeout': RETRY_WAIT, 'on_timeout': 'ack_timeout'},
-    {'name': State.HUMID, 'timeout': RETRY_WAIT, 'on_timeout': 'hmd_timeout'},
-    {'name': State.HMDTGL, 'timeout': RETRY_WAIT, 'on_timeout': 'ack_timeout'},
+    {'name': State.CMD, 'timeout': RETRY_WAIT, 'on_timeout': 'send_timeout', 'on_exit': 'send_exit'},
+    {'name': State.QUERY1, 'timeout': RETRY_WAIT, 'on_timeout': 'send_timeout', 'on_exit': 'send_exit'},
+    {'name': State.QUERY2, 'timeout': RETRY_WAIT, 'on_timeout': 'send_timeout', 'on_exit': 'send_exit'},
+    {'name': State.SSAVE, 'timeout': RETRY_WAIT, 'on_timeout': 'send_timeout', 'on_exit': 'send_exit'},
+    {'name': State.FILTER, 'timeout': RETRY_WAIT, 'on_timeout': 'send_timeout', 'on_exit': 'send_exit'},
+    {'name': State.HUMID, 'timeout': RETRY_WAIT, 'on_timeout': 'hmd_timeout', 'on_exit': 'hmd_exit'},
+    {'name': State.HMDTGL, 'timeout': RETRY_WAIT, 'on_timeout': 'send_timeout', 'on_exit': 'send_exit'},
 ]
 
 class StateMachine(object):
@@ -64,7 +62,6 @@ class StateMachine(object):
     def __init__(self, ac):
         self.ac = ac
         self.callback = None
-        self.packet = None
         self.hmd = None
 
         self.state_history = deque(maxlen=2)
@@ -73,7 +70,6 @@ class StateMachine(object):
             trigger='idle',
             source=[State.START, State.CMD, State.QUERY1, State.QUERY2, State.SSAVE, State.FILTER, State.HUMID],
             dest=State.IDLE,
-            before='before_idle',
         )
         self.machine.add_transition(trigger='cmd', source=State.IDLE, dest=State.CMD, after='send_packet')
         self.machine.add_transition(trigger='query1', source=State.IDLE, dest=State.QUERY1, after='send_packet')
@@ -96,14 +92,17 @@ class StateMachine(object):
     def state(self, value):
         self.state_history.append(value)
 
-    def ack_timeout(self, event):
-        func, args = self.callback
-        func(*args)
-
     def send_packet(self, event):
         self.callback = event.kwargs.get('callback')
         func, args = self.callback
         func(*args)
+
+    def send_timeout(self, event):
+        func, args = self.callback
+        func(*args)
+
+    def send_exit(self, event):
+        self.callback = None
 
     def set_humid(self, event):
         hmd = event.kwargs.get('value')
@@ -117,10 +116,8 @@ class StateMachine(object):
     def hmd_timeout(self, event):
         self.ac.toggle_humid()
     
-    def before_idle(self, event):
-        self.packet = None
-        if self.state == State.HUMID:
-            self.hmd = None
+    def hmd_exit(self, event):
+        self.hmd = None
 
 CmdSetItem = namedtuple('CmdSetItem', 'bits cmd text')
 CommandSets = namedtuple('CommandSets', 'power mode fan save humid')
@@ -202,8 +199,8 @@ class Aircon():
     def loop(self):
         if self.state == State.IDLE:
             if self.queue:
-                f, cb = self.queue.pop(0)
-                f(callback=cb)
+                func, kwargs = self.queue.pop(0)
+                func(**kwargs)
             elif self.update_cb is not None and self.update:
                 self.update_cb()
                 self.update = False
@@ -325,10 +322,8 @@ class Aircon():
         return p
 
     def set_power(self, cmd):
-        self.queue.append((self.machine.cmd, (self.set_power_, (cmd,))))
-        if self.state == State.IDLE:
-            f, cb = self.queue.pop(0)
-            f(callback=cb)
+        kwargs = {'callback': (self.set_power_, (cmd,))}
+        self.queue.append((self.machine.cmd, kwargs))
 
     def set_power_(self, cmd):
         header = [self.addr, 0x00, 0x11]
@@ -340,10 +335,8 @@ class Aircon():
         self.transmit(p)
 
     def set_mode(self, cmd):
-        self.queue.append((self.machine.cmd, (self.set_mode_, (cmd,))))
-        if self.state == State.IDLE:
-            f, cb = self.queue.pop(0)
-            f(callback=cb)
+        kwargs = {'callback': (self.set_mode_, (cmd,))}
+        self.queue.append((self.machine.cmd, kwargs))
 
     def set_mode_(self, cmd):
         header = [self.addr, 0x00, 0x11]
@@ -374,31 +367,28 @@ class Aircon():
         self.transmit(p)
 
     def set_temp(self, temp):
-        self.queue.append((self.machine.cmd, (self.set_temp_, (temp,))))
-        if self.state == State.IDLE:
-            f, cb = self.queue.pop(0)
-            f(callback=cb)
+        kwargs = {'callback': (self.set_temp_, (temp,))}
+        self.queue.append((self.machine.cmd, kwargs))
 
     def set_temp_(self, temp):
         assert self.state != State.START
-        self.set_cmd(HEAD_TMP, self.mode, self.fan_lv, temp)
+        self.set_cmd(0b01, self.mode, self.fan_lv, temp)
 
     def set_fan(self, cmd):
-        self.queue.append((self.machine.cmd, (self.set_fan_, (cmd,))))
-        if self.state == State.IDLE:
-            f, cb = self.queue.pop(0)
-            f(callback=cb)
+        kwargs = {'callback': (self.set_fan_, (cmd,))}
+        self.queue.append((self.machine.cmd, kwargs))
 
     def set_fan_(self, cmd):
         assert self.state != State.START
         fan_lv = self.cmd_to_bits('fan', cmd)
-        self.set_cmd(HEAD_FAN, self.mode, fan_lv, self.temp1)
+        self.set_cmd(0b10, self.mode, fan_lv, self.temp1)
 
     def sensor_query(self, id):
-        self.queue.append((self.machine.query1, (self.sensor_query_, (id,))))
+        kwargs = {'callback': (self.sensor_query_, (id,))}
+        self.queue.append((self.machine.query1, kwargs))
         if self.state == State.IDLE:
-            f, cb = self.queue.pop(0)
-            f(callback=cb)
+            func, kwargs = self.queue.pop(0)
+            func(**kwargs)
 
     def sensor_query_(self, id):
         assert id < 0xff
@@ -411,10 +401,8 @@ class Aircon():
         self.transmit(p)
 
     def extra_query(self, id):
-        self.queue.append((self.machine.query2, (self.extra_query_, (id,))))
-        if self.state == State.IDLE:
-            f, cb = self.queue.pop(0)
-            f(callback=cb)
+        kwargs = {'callback': (self.extra_query_, (id,))}
+        self.queue.append((self.machine.query2, kwargs))
 
     def extra_query_(self, id):
         assert id in [0x94, 0x9e]
@@ -433,10 +421,8 @@ class Aircon():
         self.extra_query(0x9e)
 
     def set_save(self, cmd):
-        self.queue.append((self.machine.ssave, (self.set_save_, (cmd,))))
-        if self.state == State.IDLE:
-            f, cb = self.queue.pop(0)
-            f(callback=cb)
+        kwargs = {'callback': (self.set_save_, (cmd,))}
+        self.queue.append((self.machine.ssave, kwargs))
 
     def set_save_(self, cmd):
         assert self.state != State.START
@@ -454,12 +440,10 @@ class Aircon():
         self.transmit(p)
 
     def reset_filter(self):
-        self.queue.append((self.machine.filter, (self.reset_filter_, ())))
-        if self.state == State.IDLE:
-            f, cb = self.queue.pop(0)
-            f(callback=cb)
+        kwargs = {'callback': (self.reset_filter_, ())}
+        self.queue.append((self.machine.filter, kwargs))
 
-    def reset_filter_(self, _):
+    def reset_filter_(self):
         header = [self.addr, 0xfe, 0x10]
         payload = [0x00, 0x4b]
         p = self.gen_pkt(header, payload)
@@ -467,8 +451,8 @@ class Aircon():
         self.transmit(p)
 
     def toggle_humid(self):
-        cb = (self.toggle_humid_, ())
-        self.machine.hmdtgl(callback=cb)
+        kwargs = {'callback': (self.toggle_humid_, ())}
+        self.machine.hmdtgl(**kwargs)
 
     def toggle_humid_(self):
         header = [self.addr, 0x00, 0x11]
@@ -478,13 +462,11 @@ class Aircon():
         self.transmit(p)
 
     def set_humid(self, cmd):
-        self.queue.append((self.set_humid_, (cmd,)))
-        if self.state == State.IDLE:
-            f, cb = self.queue.pop(0)
-            f(callback=cb)
+        kwargs = {'cmd': cmd}
+        self.queue.append((self.set_humid_, kwargs))
 
-    def set_humid_(self, callback):
-        cmd, = callback
+    def set_humid_(self, cmd):
+        assert self.state != State.START
         if self.mode not in [0b001, 0b101]:
             return
         value = self.cmd_to_bits('humid', cmd)
