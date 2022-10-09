@@ -53,7 +53,7 @@ states = [
     {'name': State.QUERY2, 'timeout': RETRY_WAIT, 'on_timeout': 'send_timeout', 'on_exit': 'send_exit'},
     {'name': State.SSAVE, 'timeout': RETRY_WAIT, 'on_timeout': 'send_timeout', 'on_exit': 'send_exit'},
     {'name': State.FILTER, 'timeout': RETRY_WAIT, 'on_timeout': 'send_timeout', 'on_exit': 'send_exit'},
-    {'name': State.HUMID, 'timeout': RETRY_WAIT, 'on_timeout': 'hmd_timeout', 'on_exit': 'hmd_exit'},
+    {'name': State.HUMID, 'timeout': RETRY_WAIT, 'on_timeout': 'hmd_timeout'},
     {'name': State.HMDTGL, 'timeout': RETRY_WAIT, 'on_timeout': 'send_timeout', 'on_exit': 'send_exit'},
 ]
 
@@ -70,6 +70,7 @@ class StateMachine(object):
             trigger='idle',
             source=[State.START, State.CMD, State.QUERY1, State.QUERY2, State.SSAVE, State.FILTER, State.HUMID],
             dest=State.IDLE,
+            before='before_idle',
         )
         self.machine.add_transition(trigger='cmd', source=State.IDLE, dest=State.CMD, after='send_packet')
         self.machine.add_transition(trigger='query1', source=State.IDLE, dest=State.QUERY1, after='send_packet')
@@ -116,8 +117,9 @@ class StateMachine(object):
     def hmd_timeout(self, event):
         self.ac.toggle_humid()
     
-    def hmd_exit(self, event):
-        self.hmd = None
+    def before_idle(self, event):
+        if self.state == State.HUMID:
+            self.hmd = None
 
 CmdSetItem = namedtuple('CmdSetItem', 'bits cmd text')
 CommandSets = namedtuple('CommandSets', 'power mode fan save humid')
