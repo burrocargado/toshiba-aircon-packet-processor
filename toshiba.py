@@ -374,6 +374,10 @@ class Aircon():
 
     def set_temp_(self, temp):
         assert self.state != State.START
+        modes = ['heat', 'dry', 'cool', 'auto heat', 'auto cool']
+        if self.bits_to_text('mode', self.mode) not in modes:
+            self.machine.idle()
+            return
         self.set_cmd(0b01, self.mode, self.fan_lv, temp)
 
     def set_fan(self, cmd):
@@ -453,6 +457,13 @@ class Aircon():
         self.transmit(p)
 
     def toggle_humid(self):
+        modes = ['heat', 'auto heat']
+        if self.bits_to_text('mode', self.mode) not in modes:
+            self.machine.idle()
+            return
+        if self.bits_to_text('power', self.power) == 'off':
+            self.machine.idle()
+            return
         kwargs = {'callback': (self.toggle_humid_, ())}
         self.machine.hmdtgl(**kwargs)
 
@@ -469,7 +480,5 @@ class Aircon():
 
     def set_humid_(self, cmd):
         assert self.state != State.START
-        if self.mode not in [0b001, 0b101]:
-            return
         value = self.cmd_to_bits('humid', cmd)
         self.machine.humid(value=value)
