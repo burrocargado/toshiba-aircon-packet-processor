@@ -48,13 +48,34 @@ class CustomMachine(GraphMachine):
 states = [
     State.START,
     State.IDLE,
-    {'name': State.CMD, 'timeout': RETRY_WAIT, 'on_timeout': 'send_timeout', 'on_exit': 'send_exit'},
-    {'name': State.QUERY1, 'timeout': RETRY_WAIT, 'on_timeout': 'send_timeout', 'on_exit': 'send_exit'},
-    {'name': State.QUERY2, 'timeout': RETRY_WAIT, 'on_timeout': 'send_timeout', 'on_exit': 'send_exit'},
-    {'name': State.SSAVE, 'timeout': RETRY_WAIT, 'on_timeout': 'send_timeout', 'on_exit': 'send_exit'},
-    {'name': State.FILTER, 'timeout': RETRY_WAIT, 'on_timeout': 'send_timeout', 'on_exit': 'send_exit'},
-    {'name': State.HUMID, 'timeout': RETRY_WAIT, 'on_timeout': 'hmd_timeout', 'on_exit': 'hmd_exit'},
-    {'name': State.HMDTGL, 'timeout': RETRY_WAIT, 'on_timeout': 'send_timeout', 'on_exit': 'send_exit'},
+    {
+        'name': State.CMD, 'timeout': RETRY_WAIT,
+        'on_timeout': 'send_timeout', 'on_exit': 'send_exit'
+    },
+    {
+        'name': State.QUERY1, 'timeout': RETRY_WAIT,
+        'on_timeout': 'send_timeout', 'on_exit': 'send_exit'
+    },
+    {
+        'name': State.QUERY2, 'timeout': RETRY_WAIT,
+        'on_timeout': 'send_timeout', 'on_exit': 'send_exit'
+    },
+    {
+        'name': State.SSAVE, 'timeout': RETRY_WAIT,
+        'on_timeout': 'send_timeout', 'on_exit': 'send_exit'
+    },
+    {
+        'name': State.FILTER, 'timeout': RETRY_WAIT,
+        'on_timeout': 'send_timeout', 'on_exit': 'send_exit'
+    },
+    {
+        'name': State.HUMID, 'timeout': RETRY_WAIT,
+        'on_timeout': 'hmd_timeout', 'on_exit': 'hmd_exit'
+    },
+    {
+        'name': State.HMDTGL, 'timeout': RETRY_WAIT,
+        'on_timeout': 'send_timeout', 'on_exit': 'send_exit'
+    },
 ]
 
 class StateMachine(object):
@@ -64,22 +85,53 @@ class StateMachine(object):
         self.callback = None
         self.hmd = None
 
-        self.machine = CustomMachine(model=self, states=states, initial=State.START, auto_transitions=False, send_event=True)
+        self.machine = CustomMachine(
+            model=self, states=states, initial=State.START,
+            auto_transitions=False, send_event=True
+        )
         self.machine.add_transition(
             trigger='idle',
-            source=[State.START, State.CMD, State.QUERY1, State.QUERY2, State.SSAVE, State.FILTER, State.HUMID],
+            source=[
+                State.START, State.CMD, State.QUERY1, State.QUERY2,
+                State.SSAVE, State.FILTER, State.HUMID
+            ],
             dest=State.IDLE,
         )
-        self.machine.add_transition(trigger='cmd', source=State.IDLE, dest=State.CMD, after='send_packet')
-        self.machine.add_transition(trigger='query1', source=State.IDLE, dest=State.QUERY1, after='send_packet')
-        self.machine.add_transition(trigger='query2', source=State.IDLE, dest=State.QUERY2, after='send_packet')
-        self.machine.add_transition(trigger='ssave', source=State.IDLE, dest=State.SSAVE, after='send_packet')
-        self.machine.add_transition(trigger='filter', source=State.IDLE, dest=State.FILTER, after='send_packet')
-        self.machine.add_transition(trigger='humid', source=[State.IDLE, State.HMDTGL], dest=State.HUMID, after='set_humid')
-        self.machine.add_transition(trigger='hmdtgl', source=State.HUMID, dest=State.HMDTGL, after='send_packet')
+        self.machine.add_transition(
+            trigger='cmd', source=State.IDLE, dest=State.CMD,
+            after='send_packet'
+        )
+        self.machine.add_transition(
+            trigger='query1', source=State.IDLE, dest=State.QUERY1,
+            after='send_packet'
+        )
+        self.machine.add_transition(
+            trigger='query2', source=State.IDLE, dest=State.QUERY2,
+            after='send_packet'
+        )
+        self.machine.add_transition(
+            trigger='ssave', source=State.IDLE, dest=State.SSAVE,
+            after='send_packet'
+        )
+        self.machine.add_transition(
+            trigger='filter', source=State.IDLE, dest=State.FILTER,
+            after='send_packet'
+        )
+        self.machine.add_transition(
+            trigger='humid',
+            source=[State.IDLE, State.HMDTGL], dest=State.HUMID,
+            after='set_humid'
+        )
+        self.machine.add_transition(
+            trigger='hmdtgl', source=State.HUMID, dest=State.HMDTGL,
+            after='send_packet'
+        )
         self.machine.add_transition(
             trigger='self',
-            source=[State.CMD, State.QUERY1, State.QUERY2, State.SSAVE, State.FILTER, State.HMDTGL],
+            source=[
+                State.CMD, State.QUERY1, State.QUERY2,
+                State.SSAVE, State.FILTER, State.HMDTGL
+            ],
             dest='=',
         )
 
