@@ -99,32 +99,32 @@ class StateMachine(object):
         )
         self.machine.add_transition(
             trigger='cmd', source=State.IDLE, dest=State.CMD,
-            after='send_packet'
+            after='send_packet', unless='rx_only'
         )
         self.machine.add_transition(
             trigger='query1', source=State.IDLE, dest=State.QUERY1,
-            after='send_packet'
+            after='send_packet', unless='rx_only'
         )
         self.machine.add_transition(
             trigger='query2', source=State.IDLE, dest=State.QUERY2,
-            after='send_packet'
+            after='send_packet', unless='rx_only'
         )
         self.machine.add_transition(
             trigger='ssave', source=State.IDLE, dest=State.SSAVE,
-            after='send_packet'
+            after='send_packet', unless='rx_only'
         )
         self.machine.add_transition(
             trigger='filter', source=State.IDLE, dest=State.FILTER,
-            after='send_packet'
+            after='send_packet', unless='rx_only'
         )
         self.machine.add_transition(
             trigger='humid',
             source=[State.IDLE, State.HMDTGL], dest=State.HUMID,
-            after='set_humid'
+            after='set_humid', unless='rx_only'
         )
         self.machine.add_transition(
             trigger='hmdtgl', source=State.HUMID, dest=State.HMDTGL,
-            after='send_packet'
+            after='send_packet', unless='rx_only'
         )
         self.machine.add_transition(
             trigger='self',
@@ -134,6 +134,9 @@ class StateMachine(object):
             ],
             dest='=',
         )
+
+    def rx_only(self, event):
+        return self.ac.transmit is None
 
     def send_packet(self, event):
         self.callback = event.kwargs.get('callback')
@@ -245,8 +248,9 @@ class Aircon():
             if self.queue:
                 func, kwargs = self.queue.pop(0)
                 func(**kwargs)
-            elif self.update_cb is not None and self.update:
-                self.update_cb()
+            elif self.update:
+                if self.update_cb is not None:
+                    self.update_cb()
                 self.update = False
             elif time.time() - self.q_time > QUERY_INTERVAL:
                 self.power_query()
@@ -432,6 +436,7 @@ class Aircon():
         self.set_cmd(0b10, self.mode, fan_lv, self.temp1)
 
     def sensor_query(self, id):
+        self.sensor[id] = 0
         kwargs = {'callback': (self.sensor_query_, (id,))}
         self.queue.append((self.machine.query1, kwargs))
 
@@ -446,6 +451,7 @@ class Aircon():
         self.transmit(p)
 
     def extra_query(self, id):
+        self.extra[id] = 0
         kwargs = {'callback': (self.extra_query_, (id,))}
         self.queue.append((self.machine.query2, kwargs))
 
