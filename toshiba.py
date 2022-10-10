@@ -391,9 +391,6 @@ class Aircon():
     def sensor_query(self, id):
         kwargs = {'callback': (self.sensor_query_, (id,))}
         self.queue.append((self.machine.query1, kwargs))
-        if self.state == State.IDLE:
-            func, kwargs = self.queue.pop(0)
-            func(**kwargs)
 
     def sensor_query_(self, id):
         assert id < 0xff
