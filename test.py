@@ -5,27 +5,82 @@ Tested with NTS-F1403Y1 released 2004.
 import random
 import ssl
 import json
-
+import argparse
 from paho.mqtt import client as mqtt_client
 
 from toshiba import Aircon
-from display import Display
 from credentials import *
-from database import DB
+
+import json
+from logging import getLogger, config
 
 TOPIC = "aircon/#"
 client_id = f'python-mqtt-{random.randint(0, 1000)}'
 
+parser = argparse.ArgumentParser(
+    description='packet processing server for Toshiba air conditioner'
+)
+parser.add_argument(
+    "-i", "--interactive", action='store_true',
+    help="Enable interactive mode"
+)
+parser.add_argument(
+    "-p", "--packetlog", action='store_true',
+    help="Enable packet logging to database"
+)
+parser.add_argument(
+    "-s", "--statuslog", action='store_true',
+    help="Enable status logging to database"
+)
+parser.add_argument(
+    "-v", "--verbose", action='store_true',
+    help="Set logger to DEBUG"
+)
+
+args = parser.parse_args()
+
+with open('log_config.json', 'r') as f:
+    log_conf = json.load(f)
+
+loggers = log_conf['loggers']
+for logger in loggers:
+    handler = loggers[logger]['handlers']
+    if not args.interactive:
+        if not 'consoleHandler' in handler:
+            handler.append('consoleHandler')
+        #if 'fileHandler' in handler:
+        #    handler.remove('fileHandler')
+    else:
+        if 'consoleHandler' in handler:
+            handler.remove('consoleHandler')
+        if not 'fileHandler' in handler:
+            handler.append('fileHandler')
+
+handlers = log_conf['handlers']
+for handler in handlers:
+    if args.verbose:
+        handlers[handler]['level'] = 'DEBUG'
+
+config.dictConfig(log_conf)
+logger = getLogger(__name__)
+
 ac = Aircon(0x42)
-disp = Display()
-db = DB()
+if args.interactive:
+    from display import Display
+    disp = Display()
+else:
+    disp = None
+
+if args.packetlog or args.statuslog:
+    from database import DB
+    db = DB()
 
 def connect_mqtt():
     def on_connect(_client, _userdata, _flags, rc):
         if rc == 0:
-            print("Connected to MQTT Broker!")
+            logger.info("Connected to MQTT broker")
         else:
-            print("Failed to connect, return code %d\n", rc)
+            logger.error("Failed to connect, return code %d\n", rc)
     # Set Connecting Client ID
     client = mqtt_client.Client(client_id)
     client.username_pw_set(username, password)
@@ -47,18 +102,25 @@ def subscribe(client: mqtt_client):
     def on_message(_client, _userdata, msg):
         if msg.topic == 'aircon/packet/rx':
             packet = msg.payload
+            logger.debug('aircon/packet/rx: %s', bytes(packet).hex())
             ac.parse(packet)
-            db.write_packet('RX', packet)
+            if args.packetlog:
+                db.write_packet('RX', packet)
             if disp:
                 disp.on_rx_packet(packet, ac)
         elif msg.topic == 'aircon/packet/tx':
             packet = msg.payload
-            db.write_packet('TX', packet)
+            logger.debug('aircon/packet/tx: %s', bytes(packet).hex())
+            if args.packetlog:
+                db.write_packet('TX', packet)
         elif msg.topic == 'aircon/packet/error':
             status = msg.payload
-            db.write_packet(status)
+            logger.info('aircon/packet/error: %s', status)
+            if args.packetlog:
+                db.write_packet(status)
         elif msg.topic == 'aircon/control':
             ctrl = json.loads(msg.payload)
+            logger.info('aircon/control: %s', ctrl)
             if 'set_power' in ctrl:
                 ac.set_power(ctrl['set_power'])
             if 'set_temp' in ctrl:
@@ -71,6 +133,10 @@ def subscribe(client: mqtt_client):
                 ac.set_save(ctrl['set_save'])
             if 'set_humid' in ctrl:
                 ac.set_humid(ctrl['set_humid'])
+        elif msg.topic == 'aircon/update':
+            logger.debug('aircon/update: %s', msg.payload)
+        elif msg.topic == 'aircon/status':
+            logger.debug('aircon/status: %s', msg.payload)
 
     client.subscribe(TOPIC)
     client.on_message = on_message
@@ -82,6 +148,7 @@ def run():
     def transmit(p):
         result = client.publish('aircon/packet/tx', bytearray(p))
         # result: [0, 1]
+        logger.debug('packet sent: %s', result)
         status = result[0]
         if disp:
             disp.disp_packet(p)
@@ -114,7 +181,8 @@ def run():
             'vent': 'ON' if ac.vent == 1 else 'OFF',
             'humid': ac.bits_to_text('humid', ac.humid),
         }
-        db.write_status(update)
+        if args.statuslog:
+            db.write_status(update)
         data = {
             'pwrlv1': ac.pwr_lv1,
             'pwrlv2': ac.pwr_lv2,
@@ -130,8 +198,9 @@ def run():
             'sens_current': ac.sensor[0x6a],
         }
         result = client.publish('aircon/update', json.dumps(data))
+        logger.debug('update sent: %s', result)
 
-    def update_status():
+    def update_status(ext):
         if disp:
             disp.disp_status(ac)
 
@@ -148,6 +217,9 @@ def run():
             'humid': ac.bits_to_text('humid', ac.humid),
         }
         result = client.publish('aircon/status', json.dumps(data))
+        if not ext:
+            logger.info('status change: %s', data)
+        logger.debug('status sent: %s, result:%s', data, result)
 
     ac.transmit = transmit
     ac.update_cb = update_sensors

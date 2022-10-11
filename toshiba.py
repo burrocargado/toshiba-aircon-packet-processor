@@ -5,9 +5,12 @@ import struct
 from transitions import Machine
 from transitions.extensions import GraphMachine
 from transitions.extensions.states import add_state_features, Timeout
+from logging import getLogger
 
 RETRY_WAIT = 1.0 # timeout in seconds for command or query reply
 QUERY_INTERVAL = 60.0
+
+logger = getLogger(__name__)
 
 class State(IntEnum):
     START = 0
@@ -294,9 +297,11 @@ class Aircon():
             self.save1 = payload[7] & 0b1
             if self.state == State.START:
                 self.machine.idle()
+            ext = True
         elif p[2] == 0x1c:
             payload = p[6:12]
             self.state2 = payload
+            ext = False
         if p[2] == 0x58 or p[2] == 0x1c:
             self.power = payload[0] & 0b1
             self.mode = (payload[0] >> 5) & 0b111
@@ -308,7 +313,7 @@ class Aircon():
             self.humid = (payload[2] >> 1) & 0b1
             self.temp1 = (payload[4] >> 1) - 35
             if self.status_cb:
-                self.status_cb()
+                self.status_cb(ext)
 
     def parse_params(self, p):
         if p[2] == 0x11:
@@ -370,6 +375,7 @@ class Aircon():
         return p
 
     def set_power(self, cmd):
+        logger.info('set_power: %s', cmd)
         kwargs = {'callback': (self.set_power_, (cmd,))}
         self.queue.append((self.machine.cmd, kwargs))
 
@@ -383,6 +389,7 @@ class Aircon():
         self.transmit(p)
 
     def set_mode(self, cmd):
+        logger.info('set_mode: %s', cmd)
         kwargs = {'callback': (self.set_mode_, (cmd,))}
         self.queue.append((self.machine.cmd, kwargs))
 
@@ -415,6 +422,7 @@ class Aircon():
         self.transmit(p)
 
     def set_temp(self, temp):
+        logger.info('set_temp: %s', temp)
         kwargs = {'callback': (self.set_temp_, (temp,))}
         self.queue.append((self.machine.cmd, kwargs))
 
@@ -427,6 +435,7 @@ class Aircon():
         self.set_cmd(0b01, self.mode, self.fan_lv, temp)
 
     def set_fan(self, cmd):
+        logger.info('set_fan: %s', cmd)
         kwargs = {'callback': (self.set_fan_, (cmd,))}
         self.queue.append((self.machine.cmd, kwargs))
 
@@ -436,6 +445,7 @@ class Aircon():
         self.set_cmd(0b10, self.mode, fan_lv, self.temp1)
 
     def sensor_query(self, id):
+        logger.debug('sendor_query: %s', id)
         self.sensor[id] = 0
         kwargs = {'callback': (self.sensor_query_, (id,))}
         self.queue.append((self.machine.query1, kwargs))
@@ -451,6 +461,7 @@ class Aircon():
         self.transmit(p)
 
     def extra_query(self, id):
+        logger.debug('extra_query: %s', id)
         self.extra[id] = 0
         kwargs = {'callback': (self.extra_query_, (id,))}
         self.queue.append((self.machine.query2, kwargs))
@@ -472,6 +483,7 @@ class Aircon():
         self.extra_query(0x9e)
 
     def set_save(self, cmd):
+        logger.info('set_save: %s', cmd)
         kwargs = {'callback': (self.set_save_, (cmd,))}
         self.queue.append((self.machine.ssave, kwargs))
 
@@ -491,6 +503,7 @@ class Aircon():
         self.transmit(p)
 
     def reset_filter(self):
+        logger.info('reset_filter')
         kwargs = {'callback': (self.reset_filter_, ())}
         self.queue.append((self.machine.filter, kwargs))
 
@@ -502,6 +515,7 @@ class Aircon():
         self.transmit(p)
 
     def toggle_humid(self):
+        logger.info('toggle_humid')
         modes = ['heat', 'auto heat']
         if self.bits_to_text('mode', self.mode) not in modes:
             self.machine.idle()
@@ -520,6 +534,7 @@ class Aircon():
         self.transmit(p)
 
     def set_humid(self, cmd):
+        logger.info('set_humid: %s', cmd)
         kwargs = {'cmd': cmd}
         self.queue.append((self.set_humid_, kwargs))
 
