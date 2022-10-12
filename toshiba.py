@@ -475,7 +475,7 @@ class Aircon():
 
     def sensor_query(self, qid):
         logger.debug('sendor_query: %s', qid)
-        self.sensor[id] = 0
+        self.sensor[qid] = 0
         kwargs = {'callback': (self.sensor_query_, (qid,))}
         # pylint: disable=no-member
         self.queue.append((self.machine.query1, kwargs))
@@ -493,7 +493,7 @@ class Aircon():
 
     def extra_query(self, qid):
         logger.debug('extra_query: %s', qid)
-        self.extra[id] = 0
+        self.extra[qid] = 0
         kwargs = {'callback': (self.extra_query_, (qid,))}
         # pylint: disable=no-member
         self.queue.append((self.machine.query2, kwargs))
