@@ -1,3 +1,12 @@
+"""
+Packet processor for Toshiba air conditioner
+with wired remote controller connected to AB bus.
+Tested with NTS-F1403Y1 indoor unit (residential central AC).
+
+!!! SOME MODIFICATIONS MAY BE REQUIRED        !!!
+!!! FOR USE WITH OTHER TYPES OF INDOOR UNITS. !!!
+
+"""
 from enum import IntEnum
 from collections import namedtuple
 import time

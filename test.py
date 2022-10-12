@@ -1,6 +1,7 @@
 """
-This is a test program using toshiba-aircon-mqtt-bridge.
-Tested with NTS-F1403Y1 released 2004.
+Packet processing server for Toshiba air conditioner
+with wired remote controller connected to AB bus.
+This program is for use with toshiba-aircon-mqtt-bridge.
 """
 import random
 import ssl
