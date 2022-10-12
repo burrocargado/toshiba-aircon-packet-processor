@@ -7,6 +7,7 @@ import ssl
 import json
 import argparse
 from paho.mqtt import client as mqtt_client
+import time
 
 from toshiba import Aircon
 from credentials import *
@@ -77,10 +78,21 @@ if args.packetlog or args.statuslog:
 
 def connect_mqtt():
     def on_connect(_client, _userdata, _flags, rc):
-        if rc == 0:
-            logger.info("Connected to MQTT broker")
-        else:
-            logger.error("Failed to connect, return code %d\n", rc)
+        logger.info("Connected to MQTT broker with status %d", rc)
+        client.subscribe(TOPIC)
+
+    def on_disconnect(_client, _userdata, _rc):
+        logger.warning("MQTT desconnected")
+        while True:
+            logger.debug("Trying to reconnect")
+            try:
+                client.reconnect()
+                logger.info("MQTT reconnected")
+                break
+            except Exception as e:
+                logger.debug(e)
+                time.sleep(5)
+
     # Set Connecting Client ID
     client = mqtt_client.Client(client_id)
     client.username_pw_set(username, password)
@@ -95,6 +107,7 @@ def connect_mqtt():
 
     client.tls_set_context(context)
     client.on_connect = on_connect
+    client.on_disconnect = on_disconnect
     client.connect(broker, port)
     return client
 
@@ -138,7 +151,6 @@ def subscribe(client: mqtt_client):
         elif msg.topic == 'aircon/status':
             logger.debug('aircon/status: %s', msg.payload)
 
-    client.subscribe(TOPIC)
     client.on_message = on_message
 
 def run():
