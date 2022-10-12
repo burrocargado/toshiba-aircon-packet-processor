@@ -23,19 +23,19 @@ parser = argparse.ArgumentParser(
 )
 parser.add_argument(
     "-i", "--interactive", action='store_true',
-    help="Enable interactive mode"
+    help="enable interactive mode"
 )
 parser.add_argument(
     "-p", "--packetlog", action='store_true',
-    help="Enable packet logging to database"
+    help="enable packet logging to database"
 )
 parser.add_argument(
     "-s", "--statuslog", action='store_true',
-    help="Enable status logging to database"
+    help="enable status logging to database"
 )
 parser.add_argument(
     "-v", "--verbose", action='store_true',
-    help="Set logger to DEBUG"
+    help="set logger to DEBUG"
 )
 
 args = parser.parse_args()
