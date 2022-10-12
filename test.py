@@ -7,14 +7,13 @@ import random
 import ssl
 import json
 import argparse
-from paho.mqtt import client as mqtt_client
 import time
-
-from toshiba import Aircon
-from credentials import *
-
-import json
 from logging import getLogger, config
+from paho.mqtt import client as mqtt_client
+from toshiba import Aircon
+
+# pylint: disable=wildcard-import
+from credentials import *
 
 TOPIC = "aircon/#"
 client_id = f'python-mqtt-{random.randint(0, 1000)}'
@@ -41,7 +40,7 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-with open('log_config.json', 'r') as f:
+with open('log_config.json', 'r', encoding='utf-8') as f:
     log_conf = json.load(f)
 
 loggers = log_conf['loggers']
