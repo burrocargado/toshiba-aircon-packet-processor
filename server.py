@@ -34,6 +34,10 @@ parser.add_argument(
     help="enable status logging to database"
 )
 parser.add_argument(
+    "-r", "--receive-only", action='store_true',
+    help="disable packet transmission"
+)
+parser.add_argument(
     "-v", "--verbose", action='store_true',
     help="set logger to DEBUG"
 )
@@ -233,7 +237,8 @@ def run():
             logger.info('status change: %s', data)
         logger.debug('status sent: %s, result:%s', data, result)
 
-    ac.transmit = transmit
+    if not args.receive_only:
+        ac.transmit = transmit
     ac.update_cb = update_sensors
     ac.status_cb = update_status
 
