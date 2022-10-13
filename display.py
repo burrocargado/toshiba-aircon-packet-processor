@@ -60,7 +60,7 @@ class Display():
             self.add_stat(1, line)
 
         if ac.params:
-            line = 'params: '
+            line = 'Params: '
             for c in ac.params:
                 line += f' {c:02X}'
             self.add_stat(2, line)
