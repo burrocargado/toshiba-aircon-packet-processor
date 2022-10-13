@@ -39,7 +39,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "-v", "--verbose", action='store_true',
-    help="set logger to DEBUG"
+    help="set logging level to DEBUG"
 )
 
 args = parser.parse_args()
