@@ -151,13 +151,17 @@ class StateMachine(object):
         return self.ac.transmit is None
 
     def send_packet(self, event):
+        logger.debug('send_packet')
         self.callback = event.kwargs.get('callback')
         func, args = self.callback
         func(*args)
 
     def send_timeout(self, _event):
+        logger.warning('send_timeout')
         func, args = self.callback
         func(*args)
+        # pylint: disable=no-member
+        self.self()
 
     def send_exit(self, _event):
         self.callback = None
