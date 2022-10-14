@@ -53,18 +53,12 @@ class Display():
     def on_rx_packet(self, packet, ac):
         self.disp_packet(packet)
 
-        if ac.state1:
-            line = 'State1: '
-            for c in ac.state1:
-                line += f' {c:02X}'
-            self.add_stat(1, line)
-
         if ac.params:
             line = 'Params: '
             for c in ac.params:
                 line += f' {c:02X}'
-            self.add_stat(2, line)
-    
+            self.add_stat(3, line)
+
     def disp_state_machine(self, ac):
         line = 'State:   '
         line += str(ac.state).capitalize()
@@ -120,7 +114,7 @@ class Display():
         return False
 
     def disp_sensors(self, ac):
-        y = 3
+        y = 4
         line = 'Sensors: '
         line += str({k: ac.sensor[k] for k in [0x02, 0x03, 0x04, 0x65, 0x6a]})
         self.add_stat(y, f'{line:55s}')
@@ -136,9 +130,19 @@ class Display():
         line = 'Filter:  '
         line += '{:04d} H'.format(ac.filter_time)
         self.add_stat(y, f'{line:30s}')
-    
+
     def disp_status(self, ac):
-        y = 7
+        line = 'State1: '
+        for c in ac.state1:
+            line += f' {c:02X}'
+        self.add_stat(1, line)
+        line = 'State2: '
+        if ac.state2:
+            for c in ac.state2:
+                line += f' {c:02X}'
+        self.add_stat(2, line)
+
+        y = 8
         self.add_stat(y, f"Power:   {ac.bits_to_text('power', ac.power).title():3s}")
         y +=1
         self.add_stat(y, f"Mode:    {ac.bits_to_text('mode', ac.mode).title():9s}")
