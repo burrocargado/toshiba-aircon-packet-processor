@@ -163,8 +163,9 @@ class StateMachine(object):
         # pylint: disable=no-member
         self.self()
 
-    def send_exit(self, _event):
-        self.callback = None
+    def send_exit(self, event):
+        if event.transition.dest != event.transition.source:
+            self.callback = None
 
     def set_humid(self, event):
         hmd = event.kwargs.get('value')
