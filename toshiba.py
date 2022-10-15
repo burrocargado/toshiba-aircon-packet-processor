@@ -96,6 +96,7 @@ class StateMachine(object):
         self.ac = ac
         self.callback = None
         self.hmd = None
+        self.retry = 0
 
         self.machine = CustomMachine(
             model=self, states=states, initial=State.START,
@@ -152,12 +153,22 @@ class StateMachine(object):
 
     def send_packet(self, event):
         logger.debug('send_packet')
+        self.retry = 0
         self.callback = event.kwargs.get('callback')
         func, args = self.callback
         func(*args)
 
     def send_timeout(self, _event):
-        logger.warning('send_timeout')
+        self.retry += 1
+        if self.retry < 2:
+            logger.debug('send_timeout retry: %d', self.retry)
+        elif self.retry < 5:
+            logger.warning('send_timeout retry: %d', self.retry)
+        else:
+            logger.error('send_timeout retry: %d, abort', self.retry)
+            # pylint: disable=no-member
+            self.idle()
+            return
         func, args = self.callback
         func(*args)
         # pylint: disable=no-member
