@@ -1,0 +1,5 @@
+venv
+*.pyc
+credentials.py
+server.log*
+/test
