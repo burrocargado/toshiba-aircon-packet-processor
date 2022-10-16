@@ -12,8 +12,8 @@ from collections import namedtuple
 import time
 import struct
 from logging import getLogger
-#from transitions import Machine
-from transitions.extensions import GraphMachine as Machine
+from transitions import Machine
+#from transitions.extensions import GraphMachine as Machine
 from transitions.extensions.states import add_state_features, Timeout
 
 RETRY_WAIT = 1.0 # timeout in seconds for command or query reply
