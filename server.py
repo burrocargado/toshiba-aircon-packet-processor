@@ -86,7 +86,7 @@ def connect_mqtt():
         client.subscribe(TOPIC)
 
     def on_disconnect(_client, _userdata, _rc):
-        logger.warning("MQTT desconnected")
+        logger.warning("MQTT disconnected")
         while True:
             logger.debug("Trying to reconnect")
             try:
