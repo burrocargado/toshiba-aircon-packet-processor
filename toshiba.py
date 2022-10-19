@@ -413,11 +413,11 @@ class Aircon():
 
     def set_power(self, cmd):
         logger.info('set_power: %s', cmd)
-        kwargs = {'callback': (self.set_power_, (cmd,))}
+        kwargs = {'callback': (self._set_power, (cmd,))}
         # pylint: disable=no-member
         self.queue.append((self.machine.cmd, kwargs))
 
-    def set_power_(self, cmd):
+    def _set_power(self, cmd):
         header = [self.addr, 0x00, 0x11]
         payload = [0x08, 0x41]
         byte = 0x02 | self.cmd_to_bits('power', cmd)
@@ -429,11 +429,11 @@ class Aircon():
 
     def set_mode(self, cmd):
         logger.info('set_mode: %s', cmd)
-        kwargs = {'callback': (self.set_mode_, (cmd,))}
+        kwargs = {'callback': (self._set_mode, (cmd,))}
         # pylint: disable=no-member
         self.queue.append((self.machine.cmd, kwargs))
 
-    def set_mode_(self, cmd):
+    def _set_mode(self, cmd):
         header = [self.addr, 0x00, 0x11]
         payload = [0x08, 0x42]
         byte = self.cmd_to_bits('mode', cmd)
@@ -465,11 +465,11 @@ class Aircon():
 
     def set_temp(self, temp):
         logger.info('set_temp: %s', temp)
-        kwargs = {'callback': (self.set_temp_, (temp,))}
+        kwargs = {'callback': (self._set_temp, (temp,))}
         # pylint: disable=no-member
         self.queue.append((self.machine.cmd, kwargs))
 
-    def set_temp_(self, temp):
+    def _set_temp(self, temp):
         assert self.state != State.START
         modes = ['heat', 'dry', 'cool', 'auto heat', 'auto cool']
         if self.bits_to_text('mode', self.mode) not in modes:
@@ -480,11 +480,11 @@ class Aircon():
 
     def set_fan(self, cmd):
         logger.info('set_fan: %s', cmd)
-        kwargs = {'callback': (self.set_fan_, (cmd,))}
+        kwargs = {'callback': (self._set_fan, (cmd,))}
         # pylint: disable=no-member
         self.queue.append((self.machine.cmd, kwargs))
 
-    def set_fan_(self, cmd):
+    def _set_fan(self, cmd):
         assert self.state != State.START
         fan_lv = self.cmd_to_bits('fan', cmd)
         self.set_cmd(0b10, self.mode, fan_lv, self.temp1)
@@ -492,11 +492,11 @@ class Aircon():
     def sensor_query(self, qid):
         logger.debug('sendor_query: %s', qid)
         self.sensor[qid] = 0
-        kwargs = {'callback': (self.sensor_query_, (qid,))}
+        kwargs = {'callback': (self._sensor_query, (qid,))}
         # pylint: disable=no-member
         self.queue.append((self.machine.query1, kwargs))
 
-    def sensor_query_(self, qid):
+    def _sensor_query(self, qid):
         assert qid < 0xff
         header = [self.addr, 0x00, 0x17]
         payload = [0x08, 0x80]
@@ -510,11 +510,11 @@ class Aircon():
     def extra_query(self, qid):
         logger.debug('extra_query: %s', qid)
         self.extra[qid] = 0
-        kwargs = {'callback': (self.extra_query_, (qid,))}
+        kwargs = {'callback': (self._extra_query, (qid,))}
         # pylint: disable=no-member
         self.queue.append((self.machine.query2, kwargs))
 
-    def extra_query_(self, qid):
+    def _extra_query(self, qid):
         assert qid in [0x94, 0x9e]
         header = [self.addr, 0x00, 0x15]
         payload = [0x08, 0xe8]
@@ -533,11 +533,11 @@ class Aircon():
 
     def set_save(self, cmd):
         logger.info('set_save: %s', cmd)
-        kwargs = {'callback': (self.set_save_, (cmd,))}
+        kwargs = {'callback': (self._set_save, (cmd,))}
         # pylint: disable=no-member
         self.queue.append((self.machine.ssave, kwargs))
 
-    def set_save_(self, cmd):
+    def _set_save(self, cmd):
         assert self.state != State.START
         bits = self.cmd_to_bits('save', cmd)
         header = [self.addr, 0xfe, 0x10]
@@ -555,11 +555,11 @@ class Aircon():
 
     def reset_filter(self):
         logger.info('reset_filter')
-        kwargs = {'callback': (self.reset_filter_, ())}
+        kwargs = {'callback': (self._reset_filter, ())}
         # pylint: disable=no-member
         self.queue.append((self.machine.filter, kwargs))
 
-    def reset_filter_(self):
+    def _reset_filter(self):
         header = [self.addr, 0xfe, 0x10]
         payload = [0x00, 0x4b]
         p = self.gen_pkt(header, payload)
@@ -578,11 +578,11 @@ class Aircon():
             # pylint: disable=no-member
             self.machine.idle()
             return
-        kwargs = {'callback': (self.toggle_humid_, ())}
+        kwargs = {'callback': (self._toggle_humid, ())}
         # pylint: disable=no-member
         self.machine.hmdtgl(**kwargs)
 
-    def toggle_humid_(self):
+    def _toggle_humid(self):
         header = [self.addr, 0x00, 0x11]
         payload = [0x08, 0x52, 0x01]
         p = self.gen_pkt(header, payload)
@@ -593,9 +593,9 @@ class Aircon():
     def set_humid(self, cmd):
         logger.info('set_humid: %s', cmd)
         kwargs = {'cmd': cmd}
-        self.queue.append((self.set_humid_, kwargs))
+        self.queue.append((self._set_humid, kwargs))
 
-    def set_humid_(self, cmd):
+    def _set_humid(self, cmd):
         assert self.state != State.START
         value = self.cmd_to_bits('humid', cmd)
         # pylint: disable=no-member
