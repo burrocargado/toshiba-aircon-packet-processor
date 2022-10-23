@@ -8,133 +8,80 @@ import ssl
 import json
 import argparse
 import time
+import sys
 from logging import getLogger, config
 from paho.mqtt import client as mqtt_client
 from toshiba import Aircon
+import credentials
 
-# pylint: disable=wildcard-import
-from credentials import *
-
-TOPIC = "aircon/#"
-client_id = f'python-mqtt-{random.randint(0, 1000)}'
-
-parser = argparse.ArgumentParser(
-    description='packet processing server for Toshiba air conditioner'
-)
-parser.add_argument(
-    "-i", "--interactive", action='store_true',
-    help="enable interactive mode"
-)
-parser.add_argument(
-    "-p", "--packetlog", action='store_true',
-    help="enable packet logging to database"
-)
-parser.add_argument(
-    "-s", "--statuslog", action='store_true',
-    help="enable status logging to database"
-)
-parser.add_argument(
-    "-r", "--receive-only", action='store_true',
-    help="disable packet transmission"
-)
-parser.add_argument(
-    "-v", "--verbose", action='store_true',
-    help="set logging level to DEBUG"
-)
-
-args = parser.parse_args()
-
-with open('log_config.json', 'r', encoding='utf-8') as f:
-    log_conf = json.load(f)
-
-loggers = log_conf['loggers']
-for logger in loggers:
-    handler = loggers[logger]['handlers']
-    if not args.interactive:
-        if not 'consoleHandler' in handler:
-            handler.append('consoleHandler')
-        #if 'fileHandler' in handler:
-        #    handler.remove('fileHandler')
-    else:
-        if 'consoleHandler' in handler:
-            handler.remove('consoleHandler')
-        if not 'fileHandler' in handler:
-            handler.append('fileHandler')
-
-handlers = log_conf['handlers']
-for handler in handlers:
-    if args.verbose:
-        handlers[handler]['level'] = 'DEBUG'
-
-config.dictConfig(log_conf)
 logger = getLogger(__name__)
 
-ac = Aircon(0x42)
-if args.interactive:
-    from display import Display
-    disp = Display()
-else:
-    disp = None
 
-if args.packetlog or args.statuslog:
-    from database import DB
-    db = DB()
+class Server():
+    # pylint: disable=too-many-arguments
+    def __init__(
+            self, disp=None, db=None, statuslog=False,
+            packetlog=False, receive_only=True, tls=True,
+            address=0x42):
+        self.ac = Aircon(address)
+        self.disp = disp
+        self.db = db
+        self.tls = tls
+        if db is not None:
+            self.statuslog = statuslog
+            self.packetlog = packetlog
+        else:
+            self.statuslog = False
+            self.packetlog = False
 
-def connect_mqtt():
-    def on_connect(_client, _userdata, _flags, rc):
+        if not receive_only:
+            self.ac.transmit = self.transmit
+        self.ac.update_cb = self.update_sensors
+        self.ac.status_cb = self.update_status
+
+        self.client_id = f'python-mqtt-{random.randint(0, 1000)}'
+        self.client = self.connect_mqtt()
+
+    def on_connect(self, _client, _userdata, _flags, rc):
         logger.info("Connected to MQTT broker with status %d", rc)
-        client.subscribe(TOPIC)
+        if rc == 0:
+            self.client.subscribe('aircon/#')
+        else:
+            logger.error('MQTT connection failed, abort')
+            sys.exit(1)
 
-    def on_disconnect(_client, _userdata, _rc):
-        logger.warning("MQTT desconnected")
+    def on_disconnect(self, _client, _userdata, _rc):
+        logger.warning("MQTT disconnected")
         while True:
             logger.debug("Trying to reconnect")
             try:
-                client.reconnect()
-                logger.info("MQTT reconnected")
+                self.client.reconnect()
                 break
             except Exception as e:
                 logger.debug(e)
                 time.sleep(5)
 
-    # Set Connecting Client ID
-    client = mqtt_client.Client(client_id)
-    client.username_pw_set(username, password)
-    #client.tls_set(cert_reqs=ssl.CERT_NONE)
-    #client.tls_insecure_set(True)
-    ca_certs = "certs/ca.crt"
-    certfile = "certs/client.crt"
-    keyfile = "certs/client.key"
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    context.load_verify_locations(ca_certs)
-    context.load_cert_chain(certfile, keyfile)
-
-    client.tls_set_context(context)
-    client.on_connect = on_connect
-    client.on_disconnect = on_disconnect
-    client.connect(broker, port)
-    return client
-
-def subscribe(client: mqtt_client):
-    def on_message(_client, _userdata, msg):
+    def on_message(self, _client, _userdata, msg):
+        ac = self.ac
+        # pylint: disable=too-many-branches
         if msg.topic == 'aircon/packet/rx':
             packet = msg.payload
             logger.debug('aircon/packet/rx: %s', bytes(packet).hex())
             ac.parse(packet)
-            if args.packetlog:
-                db.write_packet('RX', packet)
-            if disp:
-                disp.on_rx_packet(packet, ac)
+            if self.packetlog:
+                self.db.write_packet('RX', packet)
+            if self.disp:
+                self.disp.on_rx_packet(packet, ac)
         elif msg.topic == 'aircon/packet/tx':
             packet = msg.payload
             logger.debug('aircon/packet/tx: %s', bytes(packet).hex())
-            if args.packetlog:
-                db.write_packet('TX', packet)
+            if self.packetlog:
+                self.db.write_packet('TX', packet)
         elif msg.topic == 'aircon/packet/error':
             status = msg.payload
             logger.info('aircon/packet/error: %s', status)
-            if args.packetlog:
-                db.write_packet(status)
+            if self.packetlog:
+                self.db.write_packet(status)
         elif msg.topic == 'aircon/control':
             ctrl = json.loads(msg.payload)
             logger.info('aircon/control: %s', ctrl)
@@ -155,25 +102,48 @@ def subscribe(client: mqtt_client):
         elif msg.topic == 'aircon/status':
             logger.debug('aircon/status: %s', msg.payload)
 
-    client.on_message = on_message
+    def connect_mqtt(self):
+        client = mqtt_client.Client(self.client_id)
+        username = getattr(credentials, 'username', None)
+        password = getattr(credentials, 'password', None)
+        if username is not None and password is not None:
+            client.username_pw_set(username, password)
+        if self.tls:
+            logger.info('Use TLS for MQTT connection')
+            ca_cert = getattr(credentials, 'ca_cert', None)
+            certfile = getattr(credentials, 'certfile', None)
+            keyfile = getattr(credentials, 'keyfile', None)
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            if ca_cert is not None:
+                context.load_verify_locations(ca_cert)
+            else:
+                logger.warning('Insecure mode: disable TLS server check')
+                context.check_hostname = False
+                context.verify_mode = ssl.CERT_NONE
+            if certfile is not None and keyfile is not None:
+                context.load_cert_chain(certfile, keyfile)
 
-def run():
-    client = connect_mqtt()
-    subscribe(client)
+            client.tls_set_context(context)
 
-    def transmit(p):
-        result = client.publish('aircon/packet/tx', bytearray(p))
-        # result: [0, 1]
+        client.on_connect = self.on_connect
+        client.on_disconnect = self.on_disconnect
+        client.on_message = self.on_message
+        client.connect(credentials.broker, credentials.port)
+
+        return client
+
+    def transmit(self, p):
+        result = self.client.publish('aircon/packet/tx', bytearray(p))
         logger.debug('packet sent: %s', result)
         status = result[0]
-        if disp:
-            disp.disp_packet(p)
-            disp.send_status(p, status)
+        if self.disp:
+            self.disp.disp_packet(p)
+            self.disp.send_status(p, status)
 
-    def update_sensors():
-        if disp:
-            disp.disp_sensors(ac)
-
+    def update_sensors(self):
+        ac = self.ac
+        if self.disp:
+            self.disp.disp_sensors(ac)
         update = {
             'power': ac.bits_to_text('power', ac.power),
             'mode': ac.bits_to_text('mode', ac.mode),
@@ -197,8 +167,8 @@ def run():
             'vent': 'ON' if ac.vent == 1 else 'OFF',
             'humid': ac.bits_to_text('humid', ac.humid),
         }
-        if args.statuslog:
-            db.write_status(update)
+        if self.statuslog:
+            self.db.write_status(update)
         data = {
             'pwrlv1': ac.pwr_lv1,
             'pwrlv2': ac.pwr_lv2,
@@ -213,13 +183,13 @@ def run():
             'sens_ths': ac.sensor[0x65],
             'sens_current': ac.sensor[0x6a],
         }
-        result = client.publish('aircon/update', json.dumps(data))
+        result = self.client.publish('aircon/update', json.dumps(data))
         logger.debug('update sent: %s', result)
 
-    def update_status(ext):
-        if disp:
-            disp.disp_status(ac)
-
+    def update_status(self, ext):
+        ac = self.ac
+        if self.disp:
+            self.disp.disp_status(ac)
         data = {
             'power': ac.bits_to_text('power', ac.power),
             'mode': ac.bits_to_text('mode', ac.mode),
@@ -232,21 +202,82 @@ def run():
             'save': ac.bits_to_text('save', ac.save),
             'humid': ac.bits_to_text('humid', ac.humid),
         }
-        result = client.publish('aircon/status', json.dumps(data))
+        result = self.client.publish('aircon/status', json.dumps(data))
+
         if not ext:
             logger.info('status change: %s', data)
         logger.debug('status sent: %s, result:%s', data, result)
 
-    if not args.receive_only:
-        ac.transmit = transmit
-    ac.update_cb = update_sensors
-    ac.status_cb = update_status
+    def run(self):
+        while True:
+            self.client.loop(timeout=0.01)
+            self.ac.loop()
+            if self.disp:
+                if self.disp.loop(self.ac):
+                    break
 
-    while True:
-        client.loop(timeout=0.01)
-        ac.loop()
-        if disp:
-            if disp.loop(ac):
-                break
 
-run()
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description='packet processing server for Toshiba air conditioner'
+    )
+    parser.add_argument(
+        "-i", "--interactive", action='store_true',
+        help="enable interactive mode"
+    )
+    parser.add_argument(
+        "-p", "--packetlog", action='store_true',
+        help="enable packet logging to database"
+    )
+    parser.add_argument(
+        "-s", "--statuslog", action='store_true',
+        help="enable status logging to database"
+    )
+    parser.add_argument(
+        "-r", "--receive-only", action='store_true',
+        help="disable packet transmission"
+    )
+    parser.add_argument(
+        "-v", "--verbose", action='store_true',
+        help="set logging level to DEBUG"
+    )
+    args = parser.parse_args()
+
+    with open('log_config.json', 'r', encoding='utf-8') as f:
+        log_conf = json.load(f)
+
+    loggers = log_conf['loggers']
+    for logger_ in loggers:
+        handler = loggers[logger_]['handlers']
+        if not args.interactive:
+            if not 'consoleHandler' in handler:
+                handler.append('consoleHandler')
+            #if 'fileHandler' in handler:
+            #    handler.remove('fileHandler')
+        else:
+            if 'consoleHandler' in handler:
+                handler.remove('consoleHandler')
+            if not 'fileHandler' in handler:
+                handler.append('fileHandler')
+
+    handlers = log_conf['handlers']
+    for handler in handlers:
+        if args.verbose:
+            handlers[handler]['level'] = 'DEBUG'
+
+    config.dictConfig(log_conf)
+
+    if args.interactive:
+        from display import Display
+        _disp = Display()
+    else:
+        _disp = None
+
+    if args.packetlog or args.statuslog:
+        from database import DB
+        _db = DB()
+    else:
+        _db = None
+
+    server = Server(_disp, _db, args.statuslog, args.packetlog, args.receive_only)
+    server.run()
