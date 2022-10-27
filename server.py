@@ -87,12 +87,12 @@ class Server():
             logger.info('aircon/control: %s', ctrl)
             if 'set_power' in ctrl:
                 ac.set_power(ctrl['set_power'])
-            if 'set_temp' in ctrl:
-                ac.set_temp(ctrl['set_temp'])
-            if 'set_fan' in ctrl:
-                ac.set_fan(ctrl['set_fan'])
             if 'set_mode' in ctrl:
                 ac.set_mode(ctrl['set_mode'])
+            if 'set_fan' in ctrl:
+                ac.set_fan(ctrl['set_fan'])
+            if 'set_temp' in ctrl:
+                ac.set_temp(ctrl['set_temp'])
             if 'set_save' in ctrl:
                 ac.set_save(ctrl['set_save'])
             if 'set_humid' in ctrl:
