@@ -250,14 +250,14 @@ if __name__ == '__main__':
     for logger_ in loggers:
         handler = loggers[logger_]['handlers']
         if not args.interactive:
-            if not 'consoleHandler' in handler:
+            if 'consoleHandler' not in handler:
                 handler.append('consoleHandler')
-            #if 'fileHandler' in handler:
+            # if 'fileHandler' in handler:
             #    handler.remove('fileHandler')
         else:
             if 'consoleHandler' in handler:
                 handler.remove('consoleHandler')
-            if not 'fileHandler' in handler:
+            if 'fileHandler' not in handler:
                 handler.append('fileHandler')
 
     handlers = log_conf['handlers']
@@ -279,5 +279,7 @@ if __name__ == '__main__':
     else:
         _db = None
 
-    server = Server(_disp, _db, args.statuslog, args.packetlog, args.receive_only)
+    server = Server(
+        _disp, _db, args.statuslog, args.packetlog, args.receive_only
+    )
     server.run()

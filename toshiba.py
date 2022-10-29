@@ -13,13 +13,14 @@ import time
 import struct
 from logging import getLogger
 from transitions import Machine
-#from transitions.extensions import GraphMachine as Machine
+# from transitions.extensions import GraphMachine as Machine
 from transitions.extensions.states import add_state_features, Timeout
 
-RETRY_WAIT = 1.0 # timeout in seconds for command or query reply
+RETRY_WAIT = 1.0  # timeout in seconds for command or query reply
 QUERY_INTERVAL = 60.0
 
 logger = getLogger(__name__)
+
 
 class State(IntEnum):
     START = 0
@@ -53,9 +54,11 @@ class State(IntEnum):
             text = 'toggling humidifier'
         return text
 
+
 @add_state_features(Timeout)
 class CustomMachine(Machine):
     pass
+
 
 states = [
     State.START,
@@ -89,6 +92,7 @@ states = [
         'on_timeout': 'send_timeout', 'on_exit': 'send_exit'
     },
 ]
+
 
 class StateMachine(object):
 
@@ -194,6 +198,7 @@ class StateMachine(object):
     def hmd_exit(self, event):
         if event.transition.dest == State.IDLE.name:
             self.hmd = None
+
 
 CmdSetItem = namedtuple('CmdSetItem', 'bits cmd text')
 CommandSets = namedtuple('CommandSets', 'power mode fan save humid')
@@ -351,7 +356,7 @@ class Aircon():
     def parse_params(self, p):
         if p[2] == 0x11:
             self.params = p[6:8]
-    
+
     def parse_reply(self, p):
         if p[2] == 0x18 and p[4] == 0x80 and p[5] == 0xa1:
             if self.state == State.CMD:
@@ -364,7 +369,9 @@ class Aircon():
             if self.state == State.QUERY1:
                 p0 = self.tx_packet
                 if p[8] == 0x2c:
-                    self.sensor[p0[11]] = struct.unpack('>h', bytes(p[9:11]))[0]
+                    self.sensor[p0[11]] = (
+                        struct.unpack('>h', bytes(p[9:11]))[0]
+                    )
                 else:
                     self.sensor[p0[11]] = None
                 # pylint: disable=no-member
