@@ -467,6 +467,7 @@ class Aircon():
         for c in p:
             ck ^= c
         p.append(ck)
+        self.tx_packet = p
         return p
 
     def set_power(self, cmd):
@@ -483,7 +484,6 @@ class Aircon():
         byte = 0x02 | value
         payload.append(byte)
         p = self.gen_pkt(header, payload)
-        self.tx_packet = p
         # pylint: disable=not-callable
         self.transmit(p)
 
@@ -500,7 +500,6 @@ class Aircon():
         payload = [0x08, 0x42]
         payload.append(value)
         p = self.gen_pkt(header, payload)
-        self.tx_packet = p
         # pylint: disable=not-callable
         self.transmit(p)
 
@@ -520,7 +519,6 @@ class Aircon():
         temp = (temp + 35) << 1
         payload.append(temp)
         p = self.gen_pkt(header, payload)
-        self.tx_packet = p
         # pylint: disable=not-callable
         self.transmit(p)
 
@@ -568,7 +566,6 @@ class Aircon():
         payload += [0xef, 0x00, 0x2c, 0x08, 0x00]
         payload.append(qid)
         p = self.gen_pkt(header, payload)
-        self.tx_packet = p
         # pylint: disable=not-callable
         self.transmit(p)
 
@@ -586,7 +583,6 @@ class Aircon():
         payload += [0x00, 0x01, 0x00]
         payload.append(qid)
         p = self.gen_pkt(header, payload)
-        self.tx_packet = p
         # pylint: disable=not-callable
         self.transmit(p)
 
@@ -614,7 +610,6 @@ class Aircon():
         a = (self.temp1 + 35) << 1
         payload.append(a)
         p = self.gen_pkt(header, payload)
-        self.tx_packet = p
         # pylint: disable=not-callable
         self.transmit(p)
 
@@ -628,7 +623,6 @@ class Aircon():
         header = [self.addr, 0xfe, 0x10]
         payload = [0x00, 0x4b]
         p = self.gen_pkt(header, payload)
-        self.tx_packet = p
         # pylint: disable=not-callable
         self.transmit(p)
 
@@ -651,7 +645,6 @@ class Aircon():
         header = [self.addr, 0x00, 0x11]
         payload = [0x08, 0x52, 0x01]
         p = self.gen_pkt(header, payload)
-        self.tx_packet = p
         # pylint: disable=not-callable
         self.transmit(p)
 
