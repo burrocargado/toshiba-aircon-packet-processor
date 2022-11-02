@@ -83,20 +83,24 @@ class Server():
             if self.packetlog:
                 self.db.write_packet(status)
         elif msg.topic == 'aircon/control':
-            ctrl = json.loads(msg.payload)
-            logger.info('aircon/control: %s', ctrl)
-            if 'set_power' in ctrl:
-                ac.set_power(ctrl['set_power'])
-            if 'set_mode' in ctrl:
-                ac.set_mode(ctrl['set_mode'])
-            if 'set_fan' in ctrl:
-                ac.set_fan(ctrl['set_fan'])
-            if 'set_temp' in ctrl:
-                ac.set_temp(ctrl['set_temp'])
-            if 'set_save' in ctrl:
-                ac.set_save(ctrl['set_save'])
-            if 'set_humid' in ctrl:
-                ac.set_humid(ctrl['set_humid'])
+            try:
+                ctrl = json.loads(msg.payload)
+            except Exception as e:
+                logger.error('control message is not in json format: %s', e)
+            else:
+                logger.info('aircon/control: %s', ctrl)
+                if 'set_power' in ctrl:
+                    ac.set_power(ctrl['set_power'])
+                if 'set_mode' in ctrl:
+                    ac.set_mode(ctrl['set_mode'])
+                if 'set_fan' in ctrl:
+                    ac.set_fan(ctrl['set_fan'])
+                if 'set_temp' in ctrl:
+                    ac.set_temp(ctrl['set_temp'])
+                if 'set_save' in ctrl:
+                    ac.set_save(ctrl['set_save'])
+                if 'set_humid' in ctrl:
+                    ac.set_humid(ctrl['set_humid'])
         elif msg.topic == 'aircon/update':
             logger.debug('aircon/update: %s', msg.payload)
         elif msg.topic == 'aircon/status':

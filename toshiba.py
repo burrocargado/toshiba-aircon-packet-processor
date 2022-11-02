@@ -160,7 +160,12 @@ class StateMachine(object):
         self.retry = 0
         self.callback = event.kwargs.get('callback')
         func, args = self.callback
-        func(*args)
+        try:
+            func(*args)
+        except Exception as e:
+            logger.error('state machine packet send failed: %s', e)
+            # pylint: disable=no-member
+            self.idle()
 
     def send_timeout(self, _event):
         self.retry += 1
@@ -282,7 +287,10 @@ class Aircon():
         if self.state == State.IDLE:
             if self.queue:
                 func, kwargs = self.queue.pop(0)
-                func(**kwargs)
+                try:
+                    func(**kwargs)
+                except Exception as e:
+                    logger.error('executing queue failed: %s', e)
             elif self.update:
                 if self.update_cb is not None:
                     # pylint: disable=not-callable
@@ -397,13 +405,19 @@ class Aircon():
         return text
 
     def cmd_to_bits(self, cmdtype, cmd):
-        assert cmd != ''
+        if cmd == '':
+            raise ValueError(
+                f'empty command: type: {cmdtype}'
+            )
         bits = None
         for csi in getattr(CMDSETS, cmdtype):
             if csi.cmd == cmd:
                 bits = csi.bits
                 break
-        assert bits is not None
+        if bits is None:
+            raise ValueError(
+                f'invalid command: type: {cmdtype}, value: {cmd}'
+            )
         return bits
 
     def gen_pkt(self, header, payload):
@@ -478,11 +492,13 @@ class Aircon():
 
     def _set_temp(self, temp):
         assert self.state != State.START
+        if not isinstance(temp, int):
+            raise TypeError('temp is not integer')
+        if temp < self.MIN_TMP or temp > self.MAX_TMP:
+            raise ValueError('invalid temp value')
         modes = ['heat', 'dry', 'cool', 'auto heat', 'auto cool']
         if self.bits_to_text('mode', self.mode) not in modes:
-            # pylint: disable=no-member
-            self.machine.idle()
-            return
+            raise ValueError('set temp in invalid mode')
         self.set_cmd(0b01, self.mode, self.fan_lv, temp)
 
     def set_fan(self, cmd):
