@@ -13,13 +13,15 @@ import time
 import struct
 from logging import getLogger
 from transitions import Machine
-#from transitions.extensions import GraphMachine as Machine
+# from transitions.extensions import GraphMachine as Machine
 from transitions.extensions.states import add_state_features, Timeout
 
-RETRY_WAIT = 1.0 # timeout in seconds for command or query reply
+RETRY_WAIT = 1.0  # timeout in seconds for command or query reply
+WSTAT_WAIT = 2.0
 QUERY_INTERVAL = 60.0
 
 logger = getLogger(__name__)
+
 
 class State(IntEnum):
     START = 0
@@ -31,6 +33,7 @@ class State(IntEnum):
     FILTER = 6
     HUMID = 7
     HMDTGL = 8
+    WSTAT = 9
 
     def __str__(self):
         if self.value == 0:
@@ -51,11 +54,15 @@ class State(IntEnum):
             text = 'setting humidifier'
         elif self.value == 8:
             text = 'toggling humidifier'
+        elif self.value == 9:
+            text = 'waiting status update'
         return text
+
 
 @add_state_features(Timeout)
 class CustomMachine(Machine):
     pass
+
 
 states = [
     State.START,
@@ -63,6 +70,10 @@ states = [
     {
         'name': State.CMD, 'timeout': RETRY_WAIT,
         'on_timeout': 'send_timeout', 'on_exit': 'send_exit'
+    },
+    {
+        'name': State.WSTAT, 'timeout': WSTAT_WAIT,
+        'on_timeout': 'wstat_timeout', 'on_exit': 'wstat_exit'
     },
     {
         'name': State.QUERY1, 'timeout': RETRY_WAIT,
@@ -90,6 +101,7 @@ states = [
     },
 ]
 
+
 class StateMachine(object):
 
     def __init__(self, ac):
@@ -105,14 +117,19 @@ class StateMachine(object):
         self.machine.add_transition(
             trigger='idle',
             source=[
-                State.START, State.CMD, State.QUERY1, State.QUERY2,
-                State.SSAVE, State.FILTER, State.HUMID
+                State.START, State.CMD, State.WSTAT, State.QUERY1,
+                State.QUERY2, State.SSAVE, State.FILTER, State.HUMID
             ],
             dest=State.IDLE,
         )
         self.machine.add_transition(
-            trigger='cmd', source=State.IDLE, dest=State.CMD,
+            trigger='cmd',
+            source=[State.IDLE, State.WSTAT],
+            dest=State.CMD,
             after='send_packet', unless='rx_only'
+        )
+        self.machine.add_transition(
+            trigger='wstat', source=State.CMD, dest=State.WSTAT,
         )
         self.machine.add_transition(
             trigger='query1', source=State.IDLE, dest=State.QUERY1,
@@ -154,9 +171,16 @@ class StateMachine(object):
     def send_packet(self, event):
         logger.debug('send_packet')
         self.retry = 0
-        self.callback = event.kwargs.get('callback')
+        callback = event.kwargs.get('callback')
+        if callback is not None:
+            self.callback = event.kwargs.get('callback')
         func, args = self.callback
-        func(*args)
+        try:
+            func(*args)
+        except Exception as e:
+            logger.error('state machine packet send failed: %s', e)
+            # pylint: disable=no-member
+            self.idle()
 
     def send_timeout(self, _event):
         self.retry += 1
@@ -175,7 +199,16 @@ class StateMachine(object):
         self.self()
 
     def send_exit(self, event):
-        if event.transition.dest != event.transition.source:
+        if (event.transition.dest != event.transition.source
+                and event.transition.dest != State.WSTAT.name):
+            self.callback = None
+
+    def wstat_timeout(self, _event):
+        # pylint: disable=no-member
+        self.cmd()
+
+    def wstat_exit(self, event):
+        if event.transition.dest == State.IDLE.name:
             self.callback = None
 
     def set_humid(self, event):
@@ -194,6 +227,7 @@ class StateMachine(object):
     def hmd_exit(self, event):
         if event.transition.dest == State.IDLE.name:
             self.hmd = None
+
 
 CmdSetItem = namedtuple('CmdSetItem', 'bits cmd text')
 CommandSets = namedtuple('CommandSets', 'power mode fan save humid')
@@ -231,6 +265,8 @@ CMDSETS = CommandSets(
     )
 )
 
+CmdSetting = namedtuple('CmdSetting', 'var value')
+
 
 class Aircon():
 
@@ -244,6 +280,7 @@ class Aircon():
         self.update = False
         self.queue = []
         self.tx_packet = None
+        self.cmd_setting = None
         self.machine = StateMachine(self)
         self.addr = addr
 
@@ -277,7 +314,10 @@ class Aircon():
         if self.state == State.IDLE:
             if self.queue:
                 func, kwargs = self.queue.pop(0)
-                func(**kwargs)
+                try:
+                    func(**kwargs)
+                except Exception as e:
+                    logger.error('executing queue failed: %s', e)
             elif self.update:
                 if self.update_cb is not None:
                     # pylint: disable=not-callable
@@ -297,6 +337,16 @@ class Aircon():
                 self.sensor_query(0x6a)
                 self.q_time = time.time()
                 self.update = True
+        elif self.state == State.WSTAT:
+            var = self.cmd_setting.var
+            value = getattr(self, var)
+            if (var == 'mode'
+                    and self.bits_to_text('mode', value).startswith('auto')):
+                value = self.cmd_to_bits('mode', 'A')
+            if value == self.cmd_setting.value:
+                # pylint: disable=no-member
+                self.machine.idle()
+                self.cmd_setting = None
         elif self.state == State.SSAVE:
             p0 = self.tx_packet
             if (p0[7] >> 4) & 0b11 == self.save:
@@ -351,12 +401,12 @@ class Aircon():
     def parse_params(self, p):
         if p[2] == 0x11:
             self.params = p[6:8]
-    
+
     def parse_reply(self, p):
         if p[2] == 0x18 and p[4] == 0x80 and p[5] == 0xa1:
             if self.state == State.CMD:
                 # pylint: disable=no-member
-                self.machine.idle()
+                self.machine.wstat()
             elif self.state == State.HMDTGL:
                 # pylint: disable=no-member
                 self.machine.humid()
@@ -364,7 +414,9 @@ class Aircon():
             if self.state == State.QUERY1:
                 p0 = self.tx_packet
                 if p[8] == 0x2c:
-                    self.sensor[p0[11]] = struct.unpack('>h', bytes(p[9:11]))[0]
+                    self.sensor[p0[11]] = (
+                        struct.unpack('>h', bytes(p[9:11]))[0]
+                    )
                 else:
                     self.sensor[p0[11]] = None
                 # pylint: disable=no-member
@@ -390,13 +442,19 @@ class Aircon():
         return text
 
     def cmd_to_bits(self, cmdtype, cmd):
-        assert cmd != ''
+        if cmd == '':
+            raise ValueError(
+                f'empty command: type: {cmdtype}'
+            )
         bits = None
         for csi in getattr(CMDSETS, cmdtype):
             if csi.cmd == cmd:
                 bits = csi.bits
                 break
-        assert bits is not None
+        if bits is None:
+            raise ValueError(
+                f'invalid command: type: {cmdtype}, value: {cmd}'
+            )
         return bits
 
     def gen_pkt(self, header, payload):
@@ -409,6 +467,7 @@ class Aircon():
         for c in p:
             ck ^= c
         p.append(ck)
+        self.tx_packet = p
         return p
 
     def set_power(self, cmd):
@@ -418,12 +477,13 @@ class Aircon():
         self.queue.append((self.machine.cmd, kwargs))
 
     def _set_power(self, cmd):
+        value = self.cmd_to_bits('power', cmd)
+        self.cmd_setting = CmdSetting('power', value)
         header = [self.addr, 0x00, 0x11]
         payload = [0x08, 0x41]
-        byte = 0x02 | self.cmd_to_bits('power', cmd)
+        byte = 0x02 | value
         payload.append(byte)
         p = self.gen_pkt(header, payload)
-        self.tx_packet = p
         # pylint: disable=not-callable
         self.transmit(p)
 
@@ -434,12 +494,12 @@ class Aircon():
         self.queue.append((self.machine.cmd, kwargs))
 
     def _set_mode(self, cmd):
+        value = self.cmd_to_bits('mode', cmd)
+        self.cmd_setting = CmdSetting('mode', value)
         header = [self.addr, 0x00, 0x11]
         payload = [0x08, 0x42]
-        byte = self.cmd_to_bits('mode', cmd)
-        payload.append(byte)
+        payload.append(value)
         p = self.gen_pkt(header, payload)
-        self.tx_packet = p
         # pylint: disable=not-callable
         self.transmit(p)
 
@@ -459,7 +519,6 @@ class Aircon():
         temp = (temp + 35) << 1
         payload.append(temp)
         p = self.gen_pkt(header, payload)
-        self.tx_packet = p
         # pylint: disable=not-callable
         self.transmit(p)
 
@@ -471,11 +530,14 @@ class Aircon():
 
     def _set_temp(self, temp):
         assert self.state != State.START
+        if not isinstance(temp, int):
+            raise TypeError('temp is not integer')
+        if temp < self.MIN_TMP or temp > self.MAX_TMP:
+            raise ValueError('invalid temp value')
+        self.cmd_setting = CmdSetting('temp1', temp)
         modes = ['heat', 'dry', 'cool', 'auto heat', 'auto cool']
         if self.bits_to_text('mode', self.mode) not in modes:
-            # pylint: disable=no-member
-            self.machine.idle()
-            return
+            raise ValueError('set temp in invalid mode')
         self.set_cmd(0b01, self.mode, self.fan_lv, temp)
 
     def set_fan(self, cmd):
@@ -486,8 +548,9 @@ class Aircon():
 
     def _set_fan(self, cmd):
         assert self.state != State.START
-        fan_lv = self.cmd_to_bits('fan', cmd)
-        self.set_cmd(0b10, self.mode, fan_lv, self.temp1)
+        value = self.cmd_to_bits('fan', cmd)
+        self.cmd_setting = CmdSetting('fan_lv', value)
+        self.set_cmd(0b10, self.mode, value, self.temp1)
 
     def sensor_query(self, qid):
         logger.debug('sendor_query: %s', qid)
@@ -503,7 +566,6 @@ class Aircon():
         payload += [0xef, 0x00, 0x2c, 0x08, 0x00]
         payload.append(qid)
         p = self.gen_pkt(header, payload)
-        self.tx_packet = p
         # pylint: disable=not-callable
         self.transmit(p)
 
@@ -521,7 +583,6 @@ class Aircon():
         payload += [0x00, 0x01, 0x00]
         payload.append(qid)
         p = self.gen_pkt(header, payload)
-        self.tx_packet = p
         # pylint: disable=not-callable
         self.transmit(p)
 
@@ -549,7 +610,6 @@ class Aircon():
         a = (self.temp1 + 35) << 1
         payload.append(a)
         p = self.gen_pkt(header, payload)
-        self.tx_packet = p
         # pylint: disable=not-callable
         self.transmit(p)
 
@@ -563,7 +623,6 @@ class Aircon():
         header = [self.addr, 0xfe, 0x10]
         payload = [0x00, 0x4b]
         p = self.gen_pkt(header, payload)
-        self.tx_packet = p
         # pylint: disable=not-callable
         self.transmit(p)
 
@@ -586,7 +645,6 @@ class Aircon():
         header = [self.addr, 0x00, 0x11]
         payload = [0x08, 0x52, 0x01]
         p = self.gen_pkt(header, payload)
-        self.tx_packet = p
         # pylint: disable=not-callable
         self.transmit(p)
 

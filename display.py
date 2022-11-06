@@ -1,5 +1,6 @@
 import curses
 
+
 class Display():
     def __init__(self):
         stdscr = curses.initscr()
@@ -35,13 +36,13 @@ class Display():
         curses.endwin()
 
     def print_raw(self, line):
-        self.win_raw.move(1,2)
+        self.win_raw.move(1, 2)
         self.win_raw.insertln()
         self.win_raw.addstr(1, 2, line)
 
     def add_stat(self, r, txt):
         self.win_state.addstr(r, 2, txt)
-    
+
     def disp_packet(self, packet):
         line = ''
         for c in packet[:-1]:
@@ -99,8 +100,8 @@ class Display():
             ac.set_humid('1')
         elif c == ord('6'):
             ac.set_humid('0')
-        #elif c == ord('0'):
-        #    ac.reset_filter()
+        # elif c == ord('0'):
+        #     ac.reset_filter()
         elif c == ord('e'):
             temp = ac.temp1
             if temp > ac.MIN_TMP:
@@ -118,15 +119,15 @@ class Display():
         line = 'Sensors: '
         line += str({k: ac.sensor[k] for k in [0x02, 0x03, 0x04, 0x65, 0x6a]})
         self.add_stat(y, f'{line:55s}')
-        y +=1
+        y += 1
         line = 'Sensors: '
         line += str({k: ac.sensor[k] for k in [0x60, 0x61, 0x62, 0x63]})
         self.add_stat(y, f'{line:55s}')
-        y +=1
+        y += 1
         line = 'PwrLv:   '
         line += f'{ac.pwr_lv1:02d}, {ac.pwr_lv2:03d}'
         self.add_stat(y, f'{line:30s}')
-        y +=1
+        y += 1
         line = 'Filter:  '
         line += '{:04d} H'.format(ac.filter_time)
         self.add_stat(y, f'{line:30s}')
@@ -143,17 +144,25 @@ class Display():
         self.add_stat(2, line)
 
         y = 8
-        self.add_stat(y, f"Power:   {ac.bits_to_text('power', ac.power).title():3s}")
-        y +=1
-        self.add_stat(y, f"Mode:    {ac.bits_to_text('mode', ac.mode).title():9s}")
-        y +=1
-        self.add_stat(y, f"FanLv:   {ac.bits_to_text('fan', ac.fan_lv).title():4s}")
-        y +=1
+        self.add_stat(
+            y, f"Power:   {ac.bits_to_text('power', ac.power).title():3s}"
+        )
+        y += 1
+        self.add_stat(
+            y, f"Mode:    {ac.bits_to_text('mode', ac.mode).title():9s}"
+        )
+        y += 1
+        self.add_stat(
+            y, f"FanLv:   {ac.bits_to_text('fan', ac.fan_lv).title():4s}"
+        )
+        y += 1
         self.add_stat(y, f'SetTemp: {ac.temp1:2d}')
-        y +=1
+        y += 1
         self.add_stat(y, f'Temp:    {ac.temp2:2d}')
-        y +=1
-        self.add_stat(y, f"Save:    {ac.bits_to_text('save', ac.save).title():3s}")
+        y += 1
+        self.add_stat(
+            y, f"Save:    {ac.bits_to_text('save', ac.save).title():3s}"
+        )
 
         txt = 'Ventilation' if ac.vent else ''
         self.win_state.addstr(9, 47, f'{txt:11s}')

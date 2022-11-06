@@ -3,12 +3,15 @@ import datetime as dt
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import (Column, Integer, String,
-    DateTime, Text, BLOB)
+from sqlalchemy import (
+    Column, Integer, String, DateTime, Text, BLOB
+)
+
 
 class BaseEngine(object):
     def __init__(self, url):
         self.engine = create_engine(url, encoding="utf-8")
+
 
 class BaseSession(BaseEngine):
     def __init__(self, url):
@@ -16,7 +19,9 @@ class BaseSession(BaseEngine):
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
 
+
 Base = declarative_base()
+
 
 class Packet(Base):
     __tablename__ = 'packet'
@@ -31,6 +36,7 @@ class Packet(Base):
     opc2 = Column(String(2))
     payload = Column(Text)
     rawdata = Column(BLOB)
+
 
 class Status(Base):
     __tablename__ = 'status'
