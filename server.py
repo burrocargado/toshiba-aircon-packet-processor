@@ -46,6 +46,11 @@ class Server():
     def on_connect(self, _client, _userdata, _flags, rc):
         logger.info("Connected to MQTT broker with status %d", rc)
         if rc == 0:
+            payload = json.dumps({'connection': 'alive'})
+            self.client.publish(
+                "aircon/client/processor",
+                payload=payload, qos=1, retain=True
+            )
             self.client.subscribe('aircon/#')
         else:
             logger.error('MQTT connection failed, abort')
@@ -149,6 +154,8 @@ class Server():
         client.on_connect = self.on_connect
         client.on_disconnect = self.on_disconnect
         client.on_message = self.on_message
+        payload = json.dumps({'connection': 'dead'})
+        client.will_set("aircon/client/processor", payload=payload, qos=1, retain=True)
         client.connect(credentials.broker, credentials.port)
 
         return client
