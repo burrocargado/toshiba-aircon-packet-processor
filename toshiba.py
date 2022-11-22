@@ -115,6 +115,11 @@ class StateMachine(object):
             auto_transitions=False, send_event=True
         )
         self.machine.add_transition(
+            trigger='reset',
+            source='*',
+            dest=State.START,
+        )
+        self.machine.add_transition(
             trigger='idle',
             source=[
                 State.START, State.CMD, State.WSTAT, State.QUERY1,
@@ -208,7 +213,7 @@ class StateMachine(object):
         self.cmd()
 
     def wstat_exit(self, event):
-        if event.transition.dest == State.IDLE.name:
+        if event.transition.dest != State.CMD.name:
             self.callback = None
 
     def set_humid(self, event):
@@ -225,7 +230,7 @@ class StateMachine(object):
         self.ac.toggle_humid()
 
     def hmd_exit(self, event):
-        if event.transition.dest == State.IDLE.name:
+        if event.transition.dest != State.HMDTGL.name:
             self.hmd = None
 
 
@@ -658,3 +663,9 @@ class Aircon():
         value = self.cmd_to_bits('humid', cmd)
         # pylint: disable=no-member
         self.machine.humid(value=value)
+
+    def reset(self):
+        self.queue = []
+        self.machine.reset()
+        self.tx_packet = None
+        self.cmd_setting = None
