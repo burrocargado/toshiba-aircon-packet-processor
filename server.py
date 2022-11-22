@@ -23,6 +23,7 @@ class Server():
             self, disp=None, db=None, statuslog=False,
             packetlog=False, receive_only=True, tls=True,
             address=0x42):
+        self.bridge_alive = False
         self.ac = Aircon(address)
         self.disp = disp
         self.db = db
@@ -83,6 +84,8 @@ class Server():
             if self.packetlog:
                 self.db.write_packet(status)
         elif msg.topic == 'aircon/control':
+            if not self.bridge_alive:
+                return
             try:
                 ctrl = json.loads(msg.payload)
             except Exception as e:
@@ -101,6 +104,20 @@ class Server():
                     ac.set_save(ctrl['set_save'])
                 if 'set_humid' in ctrl:
                     ac.set_humid(ctrl['set_humid'])
+        elif msg.topic == 'aircon/client/bridge':
+            try:
+                data = json.loads(msg.payload)
+            except Exception as e:
+                logger.error('client message is not in json format: %s', e)
+            else:
+                logger.info('aircon/client/bridge: %s', data)
+                connection = data.get('connection')
+                if connection == 'dead':
+                    ac.reset()
+                    self.bridge_alive = False
+                elif connection == 'alive':
+                    self.bridge_alive = True
+
         elif msg.topic == 'aircon/update':
             logger.debug('aircon/update: %s', msg.payload)
         elif msg.topic == 'aircon/status':
