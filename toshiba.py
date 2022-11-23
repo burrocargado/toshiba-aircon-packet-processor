@@ -174,12 +174,12 @@ class StateMachine(object):
         )
 
     def start_enter(self, _event):
-        if self.ac.start_cb is not None:
+        if callable(self.ac.start_cb):
             self.ac.start_cb()
 
     def start_exit(self, event):
         if event.transition.dest != event.transition.source:
-            if self.ac.ready_cb is not None:
+            if callable(self.ac.ready_cb):
                 self.ac.ready_cb()
 
     def rx_only(self, _event):
@@ -338,7 +338,7 @@ class Aircon():
                 except Exception as e:
                     logger.error('executing queue failed: %s', e)
             elif self.update:
-                if self.update_cb is not None:
+                if callable(self.update_cb):
                     # pylint: disable=not-callable
                     self.update_cb()
                 self.update = False
@@ -413,7 +413,7 @@ class Aircon():
             self.vent = (payload[2] >> 2) & 0b1
             self.humid = (payload[2] >> 1) & 0b1
             self.temp1 = (payload[4] >> 1) - 35
-            if self.status_cb:
+            if callable(self.status_cb):
                 # pylint: disable=not-callable
                 self.status_cb(ext)
 
