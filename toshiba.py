@@ -65,7 +65,10 @@ class CustomMachine(Machine):
 
 
 states = [
-    State.START,
+    {
+        'name': State.START,
+        'on_enter': 'start_enter', 'on_exit': 'start_exit'
+    },
     State.IDLE,
     {
         'name': State.CMD, 'timeout': RETRY_WAIT,
@@ -169,6 +172,15 @@ class StateMachine(object):
             ],
             dest='=',
         )
+
+    def start_enter(self, _event):
+        if self.ac.start_cb is not None:
+            self.ac.start_cb()
+
+    def start_exit(self, event):
+        if event.transition.dest != event.transition.source:
+            if self.ac.ready_cb is not None:
+                self.ac.ready_cb()
 
     def rx_only(self, _event):
         return self.ac.transmit is None
@@ -280,6 +292,8 @@ class Aircon():
 
     def __init__(self, addr):
         self.transmit = None
+        self.start_cb = None
+        self.ready_cb = None
         self.update_cb = None
         self.status_cb = None
         self.update = False
