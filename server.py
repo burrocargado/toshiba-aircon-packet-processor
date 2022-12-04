@@ -39,11 +39,19 @@ class Server():
             self.ac.transmit = self.transmit
         self.ac.start_cb = self.send_start
         self.ac.ready_cb = self.send_ready
+        self.ac.state_cb = self.send_state
         self.ac.update_cb = self.update_sensors
         self.ac.status_cb = self.update_status
 
         self.client_id = f'python-mqtt-{random.randint(0, 1000)}'
         self.client = self.connect_mqtt()
+
+    def send_state(self, state):
+        payload = json.dumps({'internal_state': state})
+        self.client.publish(
+            "aircon/client/processor",
+            payload=payload, qos=1, retain=False
+        )
 
     def send_start(self):
         payload = json.dumps({'state': 'start'})
