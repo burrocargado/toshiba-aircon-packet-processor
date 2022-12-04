@@ -132,6 +132,7 @@ class Server():
                     ac.reset()
                     self.bridge_alive = False
                 elif connection == 'alive':
+                    ac.reset()
                     self.bridge_alive = True
 
         elif msg.topic == 'aircon/update':
