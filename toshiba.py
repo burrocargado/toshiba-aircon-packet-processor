@@ -115,7 +115,8 @@ class StateMachine(object):
 
         self.machine = CustomMachine(
             model=self, states=states, initial=State.START,
-            auto_transitions=False, send_event=True
+            auto_transitions=False, send_event=True,
+            before_state_change='state_change'
         )
         self.machine.add_transition(
             trigger='reset',
@@ -172,6 +173,10 @@ class StateMachine(object):
             ],
             dest='=',
         )
+
+    def state_change(self, event):
+        if callable(self.ac.state_cb):
+            self.ac.state_cb(str(event.transition.dest).lower())
 
     def start_enter(self, _event):
         if callable(self.ac.start_cb):
@@ -294,6 +299,7 @@ class Aircon():
         self.transmit = None
         self.start_cb = None
         self.ready_cb = None
+        self.state_cb = None
         self.update_cb = None
         self.status_cb = None
         self.update = False
