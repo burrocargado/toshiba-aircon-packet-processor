@@ -141,7 +141,7 @@ class Server():
             logger.debug('aircon/status: %s', msg.payload)
 
     def connect_mqtt(self):
-        client = mqtt_client.Client(self.client_id)
+        client = mqtt_client.Client(self.client_id, clean_session=True)
         username = getattr(credentials, 'username', None)
         password = getattr(credentials, 'password', None)
         if username is not None and password is not None:
