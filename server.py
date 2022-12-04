@@ -62,7 +62,7 @@ class Server():
     def on_connect(self, _client, _userdata, _flags, rc):
         logger.info("Connected to MQTT broker with status %d", rc)
         if rc == 0:
-            self.client.subscribe('aircon/#')
+            self.client.subscribe('aircon/#', qos=1)
         else:
             logger.error('MQTT connection failed, abort')
             sys.exit(1)
