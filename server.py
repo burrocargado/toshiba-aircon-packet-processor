@@ -248,7 +248,6 @@ class Server():
         logger.debug('status sent: %s, result:%s', data, result)
 
     def run(self):
-        self.ac.reset()
         while True:
             self.client.loop(timeout=0.01)
             self.ac.loop()
