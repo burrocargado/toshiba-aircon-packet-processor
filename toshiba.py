@@ -65,7 +65,10 @@ class CustomMachine(Machine):
 
 
 states = [
-    State.START,
+    {
+        'name': State.START,
+        'on_enter': 'start_enter', 'on_exit': 'start_exit'
+    },
     State.IDLE,
     {
         'name': State.CMD, 'timeout': RETRY_WAIT,
@@ -112,7 +115,13 @@ class StateMachine(object):
 
         self.machine = CustomMachine(
             model=self, states=states, initial=State.START,
-            auto_transitions=False, send_event=True
+            auto_transitions=False, send_event=True,
+            before_state_change='state_change'
+        )
+        self.machine.add_transition(
+            trigger='reset',
+            source='*',
+            dest=State.START,
         )
         self.machine.add_transition(
             trigger='idle',
@@ -165,6 +174,19 @@ class StateMachine(object):
             dest='=',
         )
 
+    def state_change(self, event):
+        if callable(self.ac.state_cb):
+            self.ac.state_cb(str(event.transition.dest).lower())
+
+    def start_enter(self, _event):
+        if callable(self.ac.start_cb):
+            self.ac.start_cb()
+
+    def start_exit(self, event):
+        if event.transition.dest != event.transition.source:
+            if callable(self.ac.ready_cb):
+                self.ac.ready_cb()
+
     def rx_only(self, _event):
         return self.ac.transmit is None
 
@@ -208,7 +230,7 @@ class StateMachine(object):
         self.cmd()
 
     def wstat_exit(self, event):
-        if event.transition.dest == State.IDLE.name:
+        if event.transition.dest != State.CMD.name:
             self.callback = None
 
     def set_humid(self, event):
@@ -225,7 +247,7 @@ class StateMachine(object):
         self.ac.toggle_humid()
 
     def hmd_exit(self, event):
-        if event.transition.dest == State.IDLE.name:
+        if event.transition.dest != State.HMDTGL.name:
             self.hmd = None
 
 
@@ -275,6 +297,9 @@ class Aircon():
 
     def __init__(self, addr):
         self.transmit = None
+        self.start_cb = None
+        self.ready_cb = None
+        self.state_cb = None
         self.update_cb = None
         self.status_cb = None
         self.update = False
@@ -319,7 +344,7 @@ class Aircon():
                 except Exception as e:
                     logger.error('executing queue failed: %s', e)
             elif self.update:
-                if self.update_cb is not None:
+                if callable(self.update_cb):
                     # pylint: disable=not-callable
                     self.update_cb()
                 self.update = False
@@ -394,7 +419,7 @@ class Aircon():
             self.vent = (payload[2] >> 2) & 0b1
             self.humid = (payload[2] >> 1) & 0b1
             self.temp1 = (payload[4] >> 1) - 35
-            if self.status_cb:
+            if callable(self.status_cb):
                 # pylint: disable=not-callable
                 self.status_cb(ext)
 
@@ -658,3 +683,9 @@ class Aircon():
         value = self.cmd_to_bits('humid', cmd)
         # pylint: disable=no-member
         self.machine.humid(value=value)
+
+    def reset(self):
+        self.queue = []
+        self.machine.reset()
+        self.tx_packet = None
+        self.cmd_setting = None

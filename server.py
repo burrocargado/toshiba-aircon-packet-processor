@@ -23,6 +23,7 @@ class Server():
             self, disp=None, db=None, statuslog=False,
             packetlog=False, receive_only=True, tls=True,
             address=0x42):
+        self.bridge_alive = False
         self.ac = Aircon(address)
         self.disp = disp
         self.db = db
@@ -36,16 +37,40 @@ class Server():
 
         if not receive_only:
             self.ac.transmit = self.transmit
+        self.ac.start_cb = self.send_start
+        self.ac.ready_cb = self.send_ready
+        self.ac.state_cb = self.send_state
         self.ac.update_cb = self.update_sensors
         self.ac.status_cb = self.update_status
 
         self.client_id = f'python-mqtt-{random.randint(0, 1000)}'
         self.client = self.connect_mqtt()
 
+    def send_state(self, state):
+        payload = json.dumps({'internal_state': state})
+        self.client.publish(
+            "aircon/client/processor",
+            payload=payload, qos=1, retain=False
+        )
+
+    def send_start(self):
+        payload = json.dumps({'state': 'start'})
+        self.client.publish(
+            "aircon/client/processor",
+            payload=payload, qos=1, retain=True
+        )
+
+    def send_ready(self):
+        payload = json.dumps({'state': 'ready'})
+        self.client.publish(
+            "aircon/client/processor",
+            payload=payload, qos=1, retain=True
+        )
+
     def on_connect(self, _client, _userdata, _flags, rc):
         logger.info("Connected to MQTT broker with status %d", rc)
         if rc == 0:
-            self.client.subscribe('aircon/#')
+            self.client.subscribe('aircon/#', qos=1)
         else:
             logger.error('MQTT connection failed, abort')
             sys.exit(1)
@@ -83,6 +108,8 @@ class Server():
             if self.packetlog:
                 self.db.write_packet(status)
         elif msg.topic == 'aircon/control':
+            if not self.bridge_alive:
+                return
             try:
                 ctrl = json.loads(msg.payload)
             except Exception as e:
@@ -101,13 +128,28 @@ class Server():
                     ac.set_save(ctrl['set_save'])
                 if 'set_humid' in ctrl:
                     ac.set_humid(ctrl['set_humid'])
+        elif msg.topic == 'aircon/client/bridge':
+            try:
+                data = json.loads(msg.payload)
+            except Exception as e:
+                logger.error('client message is not in json format: %s', e)
+            else:
+                logger.info('aircon/client/bridge: %s', data)
+                connection = data.get('connection')
+                if connection == 'dead':
+                    ac.reset()
+                    self.bridge_alive = False
+                elif connection == 'alive':
+                    ac.reset()
+                    self.bridge_alive = True
+
         elif msg.topic == 'aircon/update':
             logger.debug('aircon/update: %s', msg.payload)
         elif msg.topic == 'aircon/status':
             logger.debug('aircon/status: %s', msg.payload)
 
     def connect_mqtt(self):
-        client = mqtt_client.Client(self.client_id)
+        client = mqtt_client.Client(self.client_id, clean_session=True)
         username = getattr(credentials, 'username', None)
         password = getattr(credentials, 'password', None)
         if username is not None and password is not None:
@@ -132,6 +174,8 @@ class Server():
         client.on_connect = self.on_connect
         client.on_disconnect = self.on_disconnect
         client.on_message = self.on_message
+        payload = json.dumps({'state': 'offline'})
+        client.will_set("aircon/client/processor", payload=payload, qos=1, retain=True)
         client.connect(credentials.broker, credentials.port)
 
         return client
