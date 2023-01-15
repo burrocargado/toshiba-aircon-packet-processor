@@ -9,12 +9,14 @@ import json
 import argparse
 import time
 import sys
+import threading
 from logging import getLogger, config
 from paho.mqtt import client as mqtt_client
 from toshiba import Aircon
 import credentials
 
 logger = getLogger(__name__)
+lock = threading.Lock()
 
 
 class Server():
@@ -42,30 +44,25 @@ class Server():
         self.ac.state_cb = self.send_state
         self.ac.update_cb = self.update_sensors
         self.ac.status_cb = self.update_status
+        self.state_queue = []
 
         self.client_id = f'python-mqtt-{random.randint(0, 1000)}'
         self.client = self.connect_mqtt()
 
     def send_state(self, state):
         payload = json.dumps({'internal_state': state})
-        self.client.publish(
-            "aircon/client/processor",
-            payload=payload, qos=1, retain=False
-        )
+        with lock:
+            self.state_queue.append((payload, False))
 
     def send_start(self):
         payload = json.dumps({'state': 'start'})
-        self.client.publish(
-            "aircon/client/processor",
-            payload=payload, qos=1, retain=True
-        )
+        with lock:
+            self.state_queue.append((payload, True))
 
     def send_ready(self):
         payload = json.dumps({'state': 'ready'})
-        self.client.publish(
-            "aircon/client/processor",
-            payload=payload, qos=1, retain=True
-        )
+        with lock:
+            self.state_queue.append((payload, True))
 
     def on_connect(self, _client, _userdata, _flags, rc):
         logger.info("Connected to MQTT broker with status %d", rc)
@@ -258,6 +255,14 @@ class Server():
 
     def run(self):
         while True:
+            with lock:
+                while self.state_queue:
+                    payload, retain = self.state_queue.pop(0)
+                    self.client.publish(
+                        "aircon/client/processor",
+                        payload=payload, qos=1, retain=retain
+                    )
+
             self.client.loop(timeout=0.01)
             self.ac.loop()
             if self.disp:
