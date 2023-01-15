@@ -12,7 +12,6 @@ from collections import namedtuple
 import time
 import struct
 import threading
-# import random  # for timeout retry test
 from logging import getLogger
 from transitions import Machine
 # from transitions.extensions import GraphMachine as Machine
@@ -342,8 +341,6 @@ class Aircon():
     def loop(self):
         with lock:
             if self.tx_waiting_packet is not None:
-                # if random.random() < 0.8:  # for timeout retry test
-                #     self.transmit(self.tx_waiting_packet)
                 self.transmit(self.tx_waiting_packet)
                 self.tx_waiting_packet = None
 
