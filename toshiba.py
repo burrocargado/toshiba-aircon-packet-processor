@@ -11,6 +11,7 @@ from enum import IntEnum
 from collections import namedtuple
 import time
 import struct
+import threading
 from logging import getLogger
 from transitions import Machine
 # from transitions.extensions import GraphMachine as Machine
@@ -21,6 +22,7 @@ WSTAT_WAIT = 2.0
 QUERY_INTERVAL = 60.0
 
 logger = getLogger(__name__)
+lock = threading.Lock()
 
 
 class State(IntEnum):
@@ -304,6 +306,7 @@ class Aircon():
         self.status_cb = None
         self.update = False
         self.queue = []
+        self.tx_waiting_packet = None
         self.tx_packet = None
         self.cmd_setting = None
         self.machine = StateMachine(self)
@@ -336,6 +339,11 @@ class Aircon():
         return self.machine.state
 
     def loop(self):
+        with lock:
+            if self.tx_waiting_packet is not None:
+                self.transmit(self.tx_waiting_packet)
+                self.tx_waiting_packet = None
+
         if self.state == State.IDLE:
             if self.queue:
                 func, kwargs = self.queue.pop(0)
@@ -385,6 +393,10 @@ class Aircon():
             if self.humid == self.machine.hmd:
                 # pylint: disable=no-member
                 self.machine.idle()
+
+    def _transmit(self, p):
+        with lock:
+            self.tx_waiting_packet = p
 
     def parse(self, p):
         if p[0] == 0x00:
@@ -510,7 +522,7 @@ class Aircon():
         payload.append(byte)
         p = self.gen_pkt(header, payload)
         # pylint: disable=not-callable
-        self.transmit(p)
+        self._transmit(p)
 
     def set_mode(self, cmd):
         logger.info('set_mode: %s', cmd)
@@ -526,7 +538,7 @@ class Aircon():
         payload.append(value)
         p = self.gen_pkt(header, payload)
         # pylint: disable=not-callable
-        self.transmit(p)
+        self._transmit(p)
 
     def set_cmd(self, head, mode, fan_lv, temp):
         assert mode is not None
@@ -545,7 +557,7 @@ class Aircon():
         payload.append(temp)
         p = self.gen_pkt(header, payload)
         # pylint: disable=not-callable
-        self.transmit(p)
+        self._transmit(p)
 
     def set_temp(self, temp):
         logger.info('set_temp: %s', temp)
@@ -592,7 +604,7 @@ class Aircon():
         payload.append(qid)
         p = self.gen_pkt(header, payload)
         # pylint: disable=not-callable
-        self.transmit(p)
+        self._transmit(p)
 
     def extra_query(self, qid):
         logger.debug('extra_query: %s', qid)
@@ -609,7 +621,7 @@ class Aircon():
         payload.append(qid)
         p = self.gen_pkt(header, payload)
         # pylint: disable=not-callable
-        self.transmit(p)
+        self._transmit(p)
 
     def power_query(self):
         self.extra_query(0x94)
@@ -636,7 +648,7 @@ class Aircon():
         payload.append(a)
         p = self.gen_pkt(header, payload)
         # pylint: disable=not-callable
-        self.transmit(p)
+        self._transmit(p)
 
     def reset_filter(self):
         logger.info('reset_filter')
@@ -649,7 +661,7 @@ class Aircon():
         payload = [0x00, 0x4b]
         p = self.gen_pkt(header, payload)
         # pylint: disable=not-callable
-        self.transmit(p)
+        self._transmit(p)
 
     def toggle_humid(self):
         logger.info('toggle_humid')
@@ -671,7 +683,7 @@ class Aircon():
         payload = [0x08, 0x52, 0x01]
         p = self.gen_pkt(header, payload)
         # pylint: disable=not-callable
-        self.transmit(p)
+        self._transmit(p)
 
     def set_humid(self, cmd):
         logger.info('set_humid: %s', cmd)
