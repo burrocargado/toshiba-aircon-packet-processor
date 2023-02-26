@@ -33,9 +33,8 @@ alembic upgrade head
 
 ### Configuration for MQTT connection
 
-I assume that the MQTT broker is Mosquitto configured to use TLS mutual authentication.  
-Rename credentials_example.py to credentials.py and edit it to add your broker settings.  
-Store TLS certificate related files in certs folder:  
+Rename or copy mqtt.conf.example to mqtt.conf and edit it to add your broker settings.  
+If server and/or client authentication is required, place the TLS related files in the certs folder and edit mqtt.conf to reflect the paths of the files:  
 |File|Description|
 |:----|:----|
 |certs/ca.crt|CA certificate|
@@ -47,18 +46,26 @@ Store TLS certificate related files in certs folder:
 ### Command line syntax
 
 ```shell
-$ python server.py --help
-usage: server.py [-h] [-i] [-p] [-s] [-r] [-v]
+$ python server.py -h
+usage: server.py [-h] [-i] [-p] [-s] [-r] [-v] -f CONFIG
 
 packet processing server for Toshiba air conditioner
 
 optional arguments:
-  -h, --help          show this help message and exit
-  -i, --interactive   enable interactive mode
-  -p, --packetlog     enable packet logging to database
-  -s, --statuslog     enable status logging to database
-  -r, --receive-only  disable packet transmission
-  -v, --verbose       set logging level to DEBUG
+  -h, --help            show this help message and exit
+  -i, --interactive     enable interactive mode
+  -p, --packetlog       enable packet logging to database
+  -s, --statuslog       enable status logging to database
+  -r, --receive-only    disable packet transmission
+  -v, --verbose         set logging level to DEBUG
+  -f CONFIG, --config CONFIG
+                        specify configuration file
+```
+
+Be sure to specify mqtt.conf as config option:  
+
+```shell
+python server.py -f mqtt.conf
 ```
 
 ### Screen shot of VSCode displaying interactive terminal and logging data

@@ -3,17 +3,16 @@ Packet processing server for Toshiba air conditioner
 with wired remote controller connected to AB bus.
 This program is for use with toshiba-aircon-mqtt-bridge.
 """
-import random
 import ssl
 import json
 import argparse
+import configparser
 import time
 import sys
 import threading
-from logging import getLogger, config
+from logging import getLogger, config as logconfig
 from paho.mqtt import client as mqtt_client
 from toshiba import Aircon
-import credentials
 
 logger = getLogger(__name__)
 lock = threading.Lock()
@@ -22,14 +21,16 @@ lock = threading.Lock()
 class Server():
     # pylint: disable=too-many-arguments
     def __init__(
-            self, disp=None, db=None, statuslog=False,
-            packetlog=False, receive_only=True, tls=True,
+            self, config, disp=None, db=None, statuslog=False,
+            packetlog=False, receive_only=True,
             address=0x42):
+        self.config = config
         self.bridge_alive = False
         self.ac = Aircon(address)
         self.disp = disp
         self.db = db
-        self.tls = tls
+        self.topic = config['broker']['topic']
+
         if db is not None:
             self.statuslog = statuslog
             self.packetlog = packetlog
@@ -46,7 +47,6 @@ class Server():
         self.ac.status_cb = self.update_status
         self.state_queue = []
 
-        self.client_id = f'python-mqtt-{random.randint(0, 1000)}'
         self.client = self.connect_mqtt()
 
     def send_state(self, state):
@@ -67,7 +67,7 @@ class Server():
     def on_connect(self, _client, _userdata, _flags, rc):
         logger.info("Connected to MQTT broker with status %d", rc)
         if rc == 0:
-            self.client.subscribe('aircon/#', qos=1)
+            self.client.subscribe(f'{self.topic}/#', qos=1)
         else:
             logger.error('MQTT connection failed, abort')
             sys.exit(1)
@@ -86,25 +86,25 @@ class Server():
     def on_message(self, _client, _userdata, msg):
         ac = self.ac
         # pylint: disable=too-many-branches
-        if msg.topic == 'aircon/packet/rx':
+        if msg.topic == f'{self.topic}/packet/rx':
             packet = msg.payload
-            logger.debug('aircon/packet/rx: %s', bytes(packet).hex())
+            logger.debug(f'{msg.topic}: %s', bytes(packet).hex())
             ac.parse(packet)
             if self.packetlog:
                 self.db.write_packet('RX', packet)
             if self.disp:
                 self.disp.on_rx_packet(packet, ac)
-        elif msg.topic == 'aircon/packet/tx':
+        elif msg.topic == f'{self.topic}/packet/tx':
             packet = msg.payload
-            logger.debug('aircon/packet/tx: %s', bytes(packet).hex())
+            logger.debug(f'{msg.topic}: %s', bytes(packet).hex())
             if self.packetlog:
                 self.db.write_packet('TX', packet)
-        elif msg.topic == 'aircon/packet/error':
+        elif msg.topic == f'{self.topic}/packet/error':
             status = msg.payload
-            logger.info('aircon/packet/error: %s', status)
+            logger.info(f'{msg.topic}: %s', status)
             if self.packetlog:
                 self.db.write_packet(status)
-        elif msg.topic == 'aircon/control':
+        elif msg.topic == f'{self.topic}/control':
             if not self.bridge_alive:
                 return
             try:
@@ -112,7 +112,7 @@ class Server():
             except Exception as e:
                 logger.error('control message is not in json format: %s', e)
             else:
-                logger.info('aircon/control: %s', ctrl)
+                logger.info(f'{msg.topic}: %s', ctrl)
                 if 'set_power' in ctrl:
                     ac.set_power(ctrl['set_power'])
                 if 'set_mode' in ctrl:
@@ -125,13 +125,13 @@ class Server():
                     ac.set_save(ctrl['set_save'])
                 if 'set_humid' in ctrl:
                     ac.set_humid(ctrl['set_humid'])
-        elif msg.topic == 'aircon/client/bridge':
+        elif msg.topic == f'{self.topic}/client/bridge':
             try:
                 data = json.loads(msg.payload)
             except Exception as e:
                 logger.error('client message is not in json format: %s', e)
             else:
-                logger.info('aircon/client/bridge: %s', data)
+                logger.info(f'{msg.topic}: %s', data)
                 connection = data.get('connection')
                 if connection == 'dead':
                     ac.reset()
@@ -140,22 +140,24 @@ class Server():
                     ac.reset()
                     self.bridge_alive = True
 
-        elif msg.topic == 'aircon/update':
-            logger.debug('aircon/update: %s', msg.payload)
-        elif msg.topic == 'aircon/status':
-            logger.debug('aircon/status: %s', msg.payload)
+        elif msg.topic == f'{self.topic}/update':
+            logger.debug(f'{msg.topic}: %s', msg.payload)
+        elif msg.topic == f'{self.topic}/status':
+            logger.debug(f'{msg.topic}: %s', msg.payload)
 
     def connect_mqtt(self):
-        client = mqtt_client.Client(self.client_id, clean_session=True)
-        username = getattr(credentials, 'username', None)
-        password = getattr(credentials, 'password', None)
+        client_id = self.config['credentials'].get('client_id')
+        client = mqtt_client.Client(client_id, clean_session=True)
+        username = self.config['credentials'].get('username')
+        password = self.config['credentials'].get('password')
         if username is not None and password is not None:
             client.username_pw_set(username, password)
-        if self.tls:
+        use_tls = self.config['broker'].getboolean('tls', fallback=False)
+        if use_tls:
             logger.info('Use TLS for MQTT connection')
-            ca_cert = getattr(credentials, 'ca_cert', None)
-            certfile = getattr(credentials, 'certfile', None)
-            keyfile = getattr(credentials, 'keyfile', None)
+            ca_cert = self.config['credentials'].get('cacert')
+            certfile = self.config['credentials'].get('certfile')
+            keyfile = self.config['credentials'].get('keyfile')
             context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
             if ca_cert is not None:
                 context.load_verify_locations(ca_cert)
@@ -172,13 +174,15 @@ class Server():
         client.on_disconnect = self.on_disconnect
         client.on_message = self.on_message
         payload = json.dumps({'state': 'offline'})
-        client.will_set("aircon/client/processor", payload=payload, qos=1, retain=True)
-        client.connect(credentials.broker, credentials.port)
+        client.will_set(f'{self.topic}/client/processor', payload=payload, qos=1, retain=True)
+        host = self.config['broker']['host']
+        port = self.config['broker'].getint('port')
+        client.connect(host, port)
 
         return client
 
     def transmit(self, p):
-        result = self.client.publish('aircon/packet/tx', bytearray(p))
+        result = self.client.publish(f'{self.topic}/packet/tx', bytearray(p))
         logger.debug('packet sent: %s', result)
         status = result[0]
         if self.disp:
@@ -228,7 +232,7 @@ class Server():
             'sens_ths': ac.sensor[0x65],
             'sens_current': ac.sensor[0x6a],
         }
-        result = self.client.publish('aircon/update', json.dumps(data))
+        result = self.client.publish(f'{self.topic}/update', json.dumps(data))
         logger.debug('update sent: %s', result)
 
     def update_status(self, ext):
@@ -247,7 +251,7 @@ class Server():
             'save': ac.bits_to_text('save', ac.save),
             'humid': ac.bits_to_text('humid', ac.humid),
         }
-        result = self.client.publish('aircon/status', json.dumps(data))
+        result = self.client.publish(f'{self.topic}/status', json.dumps(data))
 
         if not ext:
             logger.info('status change: %s', data)
@@ -259,7 +263,7 @@ class Server():
                 while self.state_queue:
                     payload, retain = self.state_queue.pop(0)
                     self.client.publish(
-                        "aircon/client/processor",
+                        f'{self.topic}/client/processor',
                         payload=payload, qos=1, retain=retain
                     )
 
@@ -294,7 +298,15 @@ if __name__ == '__main__':
         "-v", "--verbose", action='store_true',
         help="set logging level to DEBUG"
     )
+    parser.add_argument(
+        "-f", "--config", required=True,
+        help="specify configuration file"
+    )
+
     args = parser.parse_args()
+
+    config = configparser.ConfigParser()
+    config.read(args.config)
 
     with open('log_config.json', 'r', encoding='utf-8') as f:
         log_conf = json.load(f)
@@ -318,7 +330,7 @@ if __name__ == '__main__':
         if args.verbose:
             handlers[handler]['level'] = 'DEBUG'
 
-    config.dictConfig(log_conf)
+    logconfig.dictConfig(log_conf)
 
     if args.interactive:
         from display import Display
@@ -333,6 +345,6 @@ if __name__ == '__main__':
         _db = None
 
     server = Server(
-        _disp, _db, args.statuslog, args.packetlog, args.receive_only
+        config, _disp, _db, args.statuslog, args.packetlog, args.receive_only
     )
     server.run()
