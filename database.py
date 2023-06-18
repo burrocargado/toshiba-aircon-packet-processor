@@ -10,7 +10,7 @@ from sqlalchemy import (
 
 class BaseEngine(object):
     def __init__(self, url):
-        self.engine = create_engine(url, encoding="utf-8")
+        self.engine = create_engine(url)
 
 
 class BaseSession(BaseEngine):
